@@ -181,7 +181,7 @@ function shJobCard(job) {
   const quotes = job.quotes || [];
   const accepted = quotes.find((q) => q.status === "accepted");
   const isDone = job.status === "completed";
-  const acts = [];
+  const acts = [`<button class="sh-btn ghost" onclick="openTrack('${job.id}')"><i class="fas fa-route"></i> Track Job</button>`];
   if (!isDone) {
     if (job.status === "pending-completion") {
       acts.push(`<button class="sh-btn ok" onclick="confirmJobCompletion('${job.id}')"><i class="fas fa-check-double"></i> Confirm Completion</button>`);
@@ -189,6 +189,7 @@ function shJobCard(job) {
     } else {
       acts.push(`<button class="sh-btn ok" onclick="markJobCompleted('${job.id}')"><i class="fas fa-check"></i> Mark as Completed</button>`);
     }
+    if ((job.photos || []).length < SH_MAX_PHOTOS) acts.push(`<label class="sh-btn ghost" style="cursor:pointer"><input type="file" accept="image/*" multiple hidden onchange="shAddJobPhotos('${job.id}', this)"><i class="fas fa-camera"></i> Add Photos</label>`);
     if (job.conversationId) acts.push(`<button class="sh-btn ghost" onclick="openJobChat('${job.conversationId}','${shEsc(job.assignedProviderName || "Provider").replace(/'/g, "")}')"><i class="fas fa-comments"></i> Job Chat</button>`);
     if (job.status === "open") acts.push(`<button class="sh-btn danger" onclick="cancelJob('${job.id}')"><i class="fas fa-times"></i> Cancel Job</button>`);
   }
@@ -201,6 +202,7 @@ function shJobCard(job) {
     </div>${shChip(SH_STATUS, job.status)}</div>
     ${job.status === "awaiting-provider" ? `<div class="sh-assigned" style="background:#f3e5f5;color:#4a148c"><i class="fas fa-hourglass-half"></i> Offer sent to <b>${shEsc(job.assignedProviderName)}</b> for <b>${shKES(job.acceptedAmount)}</b>. Waiting for them to accept the job.</div>`
       : (accepted || job.assignedProviderName) ? `<div class="sh-assigned"><i class="fas fa-user-check"></i> <b>${shEsc(job.assignedProviderName || accepted.providerName)}</b> is doing this job for <b>${shKES(job.acceptedAmount || (accepted && accepted.amount))}</b>${job.plannedStartDate ? ` · starts ${shDate(job.plannedStartDate)}` : ""}</div>` : ""}
+    ${shPhotoStrip(job)}
     ${acts.length ? `<div class="sh-actions">${acts.join("")}</div>` : ""}
     ${isDone ? "" : `<div class="sh-quotes"><h4><i class="fas fa-file-invoice-dollar" style="color:var(--primary)"></i> Quotes received (${quotes.length})</h4>
       ${quotes.length ? quotes.map((q) => `<div class="sh-q" role="button" tabindex="0" onclick="openQuote('${job.id}','${q.id}')" onkeydown="if(event.key==='Enter')openQuote('${job.id}','${q.id}')">
@@ -305,13 +307,15 @@ async function loadMyAssignedJobs(opts = {}) {
     ${offers.length ? `<div class="sh-assigned" style="margin:0 0 14px;background:#f3e5f5;color:#4a148c;font-weight:600"><i class="fas fa-bell"></i> You have ${offers.length} new job offer${offers.length > 1 ? "s" : ""}. Accept to start the job.</div>` : ""}
     ${offers.map((job) => `<div class="sh-job" style="border:2px solid #8e24aa"><div class="sh-job-top"><div><h3>${shEsc(job.title)}</h3>${meta(job)}</div>${shChip({ "awaiting-provider": ["New job offer", "#6a1b9a", "#f3e5f5"] }, "awaiting-provider")}</div>
         ${job.description ? `<div class="sh-empty" style="padding:0 20px 10px">${shEsc(job.description).slice(0, 220)}</div>` : ""}
+        ${shPhotoStrip(job)}
         <div class="sh-actions" style="align-items:center"><label style="font-size:.85rem;color:var(--dark-gray)">Start date <input type="date" id="start-${job.id}" value="${today}" min="${today}" style="margin-left:6px;padding:7px;border:1px solid var(--light-gray);border-radius:8px"></label>
           <button class="sh-btn ok" onclick="providerAcceptJob('${job.id}')"><i class="fas fa-handshake"></i> Accept Job</button>
           <button class="sh-btn danger" onclick="providerDeclineJob('${job.id}')"><i class="fas fa-times"></i> Decline</button></div></div>`).join("")}
     ${working.map((job) => `<div class="sh-job"><div class="sh-job-top"><div><h3>${shEsc(job.title)}</h3>${meta(job)}
         ${job.plannedStartDate ? `<div class="sh-meta" style="margin-top:4px"><span><i class="far fa-calendar-check"></i> Start date ${shDate(job.plannedStartDate)}</span></div>` : ""}</div>${shChip(SH_STATUS, job.status)}</div>
       <div class="sh-actions">${job.status === "in-progress" ? `<button class="sh-btn ok" onclick="requestJobCompletion('${job.id}')"><i class="fas fa-check"></i> Mark Complete</button>` : `<span class="sh-empty"><i class="fas fa-clock"></i> Waiting for the client to confirm completion</span>`}
-        ${job.conversationId ? `<button class="sh-btn ghost" onclick="openJobChat('${job.conversationId}','${shEsc(job.clientName || "Client").replace(/'/g, "")}')"><i class="fas fa-comments"></i> Job Chat</button>` : ""}</div></div>`).join("")}
+        <button class="sh-btn ghost" onclick="openTrack('${job.id}')"><i class="fas fa-route"></i> Track &amp; Update</button>
+        ${job.conversationId ? `<button class="sh-btn ghost" onclick="openJobChat('${job.conversationId}','${shEsc(job.clientName || "Client").replace(/'/g, "")}')"><i class="fas fa-comments"></i> Job Chat</button>` : ""}</div>${shPhotoStrip(job)}</div>`).join("")}
     ${!jobs.length ? `<div class="sh-job"><div class="sh-loading">No jobs yet. Send quotes on open jobs. When a client accepts your quote, the offer appears here for you to accept.</div></div>` : ""}`;
 }
 async function providerAcceptJob(jobId) {
@@ -555,3 +559,221 @@ function closeChatView() {
   const upd = () => document.body.classList.toggle("shc-in-chat", sec.classList.contains("active"));
   new MutationObserver(upd).observe(sec, { attributes: true, attributeFilter: ["class"] }); upd();
 })();
+
+/* =====================================================================
+   JOB PHOTOS — client attaches photos (compressed on the phone before upload)
+   ===================================================================== */
+(function photoStyles() {
+  const css = `
+  .shp-picker{display:flex;flex-wrap:wrap;gap:8px}
+  .shp-th{position:relative;width:78px;height:78px;border-radius:10px;overflow:hidden;background:#eee;flex:0 0 78px}
+  .shp-th img{width:100%;height:100%;object-fit:cover;cursor:zoom-in;display:block}
+  .shp-th button{position:absolute;top:3px;right:3px;width:22px;height:22px;border-radius:50%;border:0;background:rgba(0,0,0,.65);color:#fff;font-size:.8rem;line-height:22px;cursor:pointer;padding:0}
+  .shp-add{width:78px;height:78px;border:2px dashed var(--light-gray);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;color:var(--primary);font-size:.75rem;font-weight:600;flex:0 0 78px}
+  .shp-add:hover{border-color:var(--primary)}
+  .sh-photos{display:flex;gap:8px;overflow-x:auto;padding:0 20px 12px;scrollbar-width:thin}
+  .sh-photos img{width:84px;height:84px;object-fit:cover;border-radius:10px;cursor:zoom-in;flex:0 0 84px;background:#eee}
+  #detail-job-images{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+  #detail-job-images img{width:150px;height:150px;object-fit:cover;border-radius:12px;cursor:zoom-in}
+  @media(max-width:600px){.sh-photos{padding:0 14px 12px}#detail-job-images img{width:calc(50% - 5px);height:140px}}`;
+  const st = document.createElement("style"); st.textContent = css; document.head.appendChild(st);
+})();
+
+const SH_MAX_PHOTOS = 6;
+let shPendingPhotos = [];
+
+function shCompress(file, maxSide = 1280, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    if (!file || !/^image\//.test(file.type)) return reject(new Error("Not an image"));
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      let { width: w, height: h } = img;
+      const k = Math.min(1, maxSide / Math.max(w, h)); w = Math.round(w * k); h = Math.round(h * k);
+      const c = document.createElement("canvas"); c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      let q = quality, out = c.toDataURL("image/jpeg", q);
+      while (out.length > 950000 && q > 0.35) { q -= 0.1; out = c.toDataURL("image/jpeg", q); }
+      resolve(out);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read image")); };
+    img.src = url;
+  });
+}
+async function shFilesToPhotos(files, room) {
+  const list = [...(files || [])].slice(0, room);
+  const out = [];
+  for (const f of list) { try { out.push(await shCompress(f)); } catch (e) { showNotification(`Skipped ${f.name}: not a supported image`, "warning"); } }
+  if (files && files.length > room) showNotification(`Only ${SH_MAX_PHOTOS} photos per job. Extra photos were skipped.`, "info");
+  return out;
+}
+
+function renderPostJobPhotos() {
+  const box = document.getElementById("job-photo-picker");
+  if (!box) return;
+  box.innerHTML = shPendingPhotos.map((d, i) => `<div class="shp-th"><img src="${d}" alt="Job photo ${i + 1}" onclick="openImageModal(this.src)"><button type="button" aria-label="Remove photo" onclick="shPendingPhotos.splice(${i},1);renderPostJobPhotos()">×</button></div>`).join("")
+    + (shPendingPhotos.length < SH_MAX_PHOTOS ? `<label class="shp-add"><input type="file" accept="image/*" multiple hidden onchange="shAddPendingPhotos(this)"><i class="fas fa-camera" style="font-size:1.3rem"></i><span>Add photo</span></label>` : "");
+}
+async function shAddPendingPhotos(input) {
+  const room = SH_MAX_PHOTOS - shPendingPhotos.length;
+  const add = await shFilesToPhotos(input.files, room);
+  shPendingPhotos.push(...add);
+  input.value = "";
+  renderPostJobPhotos();
+}
+document.addEventListener("DOMContentLoaded", renderPostJobPhotos);
+renderPostJobPhotos();
+
+async function handlePostJob() {
+  const v = (id) => { const el = document.getElementById(id); return el ? el.value : ""; };
+  const title = v("job-title").trim(), category = v("job-category"), county = v("job-county"), description = v("job-description").trim();
+  const budgetMin = v("job-budget-min"), budgetMax = v("job-budget-max"), subcounty = v("job-subcounty"), urgency = v("job-urgency") || "normal";
+  if (!title || !category || !county || !description || !budgetMin || !budgetMax) { showNotification("Please fill all required fields", "error"); return; }
+  if (Number(budgetMin) > Number(budgetMax)) { showNotification("Minimum budget can't be more than the maximum", "error"); return; }
+  if (!getToken()) { showNotification("Please sign in to post a job", "error"); showSection("auth"); return; }
+  const btn = document.getElementById("submit-post-job"); if (btn) btn.disabled = true;
+  showNotification(shPendingPhotos.length ? `Posting your job with ${shPendingPhotos.length} photo(s)...` : "Posting your job...", "info");
+  const data = await shApi("/jobs", { method: "POST", body: JSON.stringify({ title, category, county, subcounty, description, budgetMin: parseInt(budgetMin), budgetMax: parseInt(budgetMax), urgency, photos: shPendingPhotos }) }).catch(() => ({ success: false, message: "Cannot reach ServiceHub. Check your connection." }));
+  if (btn) btn.disabled = false;
+  if (!data.success) { showNotification(data.message || (data.errors && data.errors[0] && data.errors[0].msg) || "Failed to post job", "error"); return; }
+  document.getElementById("post-job-modal").classList.remove("active");
+  ["job-title", "job-description", "job-budget-min", "job-budget-max"].forEach((id) => { const el = document.getElementById(id); if (el) el.value = ""; });
+  shPendingPhotos = []; renderPostJobPhotos();
+  showNotification("Job posted! Service providers can now see it and send quotes.", "success");
+  if (typeof loadJobs === "function") loadJobs();
+  const dash = document.getElementById("dashboard");
+  if (dash && dash.classList.contains("active")) { shJobsTab = "active"; loadMyJobs({ quiet: true }); loadDashboardStats(); }
+}
+
+async function shAddJobPhotos(jobId, input) {
+  const job = shMyJobs.find((j) => j.id === jobId);
+  const room = SH_MAX_PHOTOS - ((job && job.photos) || []).length;
+  if (room <= 0) { showNotification(`This job already has ${SH_MAX_PHOTOS} photos`, "info"); return; }
+  const photos = await shFilesToPhotos(input.files, room); input.value = "";
+  if (!photos.length) return;
+  showNotification("Uploading photos...", "info");
+  const data = await shApi(`/jobs/${jobId}/photos`, { method: "POST", body: JSON.stringify({ photos }) }).catch(() => ({ success: false }));
+  showNotification(data.success ? "Photos added to your job." : data.message || "Could not add photos", data.success ? "success" : "error");
+  loadMyJobs({ quiet: true });
+}
+const shPhotoStrip = (job) => (job.photos && job.photos.length) ? `<div class="sh-photos">${job.photos.map((p, i) => `<img src="${p.url}" loading="lazy" alt="Photo ${i + 1} of ${shEsc(job.title)}" onclick="openImageModal(this.src)">`).join("")}</div>` : "";
+
+/* job details page (providers viewing a job) now shows the client's real photos */
+async function handleViewJob(jobId) {
+  showNotification("Loading job details...", "info");
+  let data;
+  try { const res = await fetch(`${API_BASE}/jobs/${jobId}`, { headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {} }); data = await res.json(); }
+  catch (e) { showNotification("Connection error. Please try again.", "error"); return; }
+  if (!data.success) { showNotification(data.message || "Could not load job details", "error"); return; }
+  const job = data.job, set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set("detail-job-title", job.title); set("detail-job-category", job.category);
+  set("detail-job-price", `KES ${Number(job.budgetMin).toLocaleString()} - ${Number(job.budgetMax).toLocaleString()}`);
+  set("detail-job-description", job.description); set("detail-job-location", `${job.county}${job.subcounty ? ", " + job.subcounty : ""}`);
+  set("detail-job-time", new Date(job.createdAt).toLocaleDateString("en-KE", { year: "numeric", month: "long", day: "numeric" }));
+  set("detail-job-client", job.clientName || "Client");
+  const imgs = document.getElementById("detail-job-images");
+  if (imgs) imgs.innerHTML = (job.photos || []).map((p, i) => `<img src="${p.url}" loading="lazy" alt="Job photo ${i + 1}" onclick="openImageModal(this.src)">`).join("") || `<span style="color:var(--medium-gray);font-size:.9rem"><i class="far fa-image"></i> No photos attached</span>`;
+  const q = document.getElementById("quote-job-id"); if (q) q.value = jobId;
+  ["quote-amount", "quote-message"].forEach((id) => { const el = document.getElementById(id); if (el) el.value = ""; });
+  showSection("job-details");
+}
+
+/* =====================================================================
+   JOB TRACKING — shared by client and provider
+   ===================================================================== */
+(function trackingUI() {
+  const css = `
+  .sht-steps{display:flex;justify-content:space-between;position:relative;margin:6px 0 20px}
+  .sht-steps:before{content:"";position:absolute;left:8%;right:8%;top:15px;height:3px;background:var(--light-gray)}
+  .sht-bar{position:absolute;left:8%;top:15px;height:3px;background:#2e7d32;transition:width .4s}
+  .sht-step{position:relative;z-index:1;text-align:center;flex:1;font-size:.72rem;color:var(--medium-gray);font-weight:600}
+  .sht-dot{width:32px;height:32px;border-radius:50%;margin:0 auto 6px;background:var(--white);border:3px solid var(--light-gray);display:flex;align-items:center;justify-content:center;font-size:.8rem}
+  .sht-step.done .sht-dot{background:#2e7d32;border-color:#2e7d32;color:#fff}
+  .sht-step.now .sht-dot{border-color:var(--primary);color:var(--primary);box-shadow:0 0 0 5px rgba(52,152,219,.15)}
+  .sht-step.done,.sht-step.now{color:var(--dark)}
+  .sht-tl{list-style:none;margin:0;padding:0 0 0 18px;border-left:2px solid var(--light-gray)}
+  .sht-tl li{position:relative;padding:0 0 14px 14px}
+  .sht-tl li:before{content:"";position:absolute;left:-25px;top:3px;width:12px;height:12px;border-radius:50%;background:var(--primary);border:2px solid var(--white);box-shadow:0 0 0 2px var(--primary)}
+  .sht-tl li.latest:before{background:#2e7d32;box-shadow:0 0 0 2px #2e7d32}
+  .sht-tl b{display:block;color:var(--dark);font-size:.92rem}
+  .sht-tl small{color:var(--medium-gray)}
+  .sht-tl .sht-note{margin-top:4px;background:var(--light,#f6f8fb);padding:6px 10px;border-radius:8px;font-size:.86rem;white-space:pre-wrap;overflow-wrap:anywhere}
+  .sht-quick{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+  .sht-quick button{border:1.5px solid var(--primary);background:transparent;color:var(--primary);border-radius:999px;padding:7px 12px;font-size:.8rem;font-weight:600;cursor:pointer}
+  .sht-quick button:hover{background:var(--primary);color:#fff}
+  #track-note{width:100%;min-height:60px;border:1px solid var(--light-gray);border-radius:10px;padding:10px;font:inherit;resize:vertical}`;
+  const st = document.createElement("style"); st.textContent = css; document.head.appendChild(st);
+  const m = document.createElement("div");
+  m.className = "modal"; m.id = "track-modal";
+  m.innerHTML = `<div class="modal-content" style="max-width:600px;">
+    <div class="modal-header"><h2 class="modal-title" id="track-title"><i class="fas fa-route" style="color:var(--primary);margin-right:8px"></i>Track Job</h2>
+    <button class="modal-close" onclick="closeTrack()">&times;</button></div>
+    <div class="modal-body" id="track-body"></div></div>`;
+  document.body.appendChild(m);
+})();
+
+let shTrackJobId = null;
+const SHT_STAGES = [["fa-clipboard-list", "Posted"], ["fa-user-check", "Provider chosen"], ["fa-handshake", "Accepted"], ["fa-tools", "Work done"], ["fa-flag-checkered", "Completed"]];
+const SHT_STAGE_OF = { open: 0, "awaiting-provider": 1, "in-progress": 2, "pending-completion": 3, completed: 4, cancelled: 0 };
+const SHT_ICON = { posted: "fa-clipboard-list", quote: "fa-file-invoice-dollar", offered: "fa-user-check", provider_accepted: "fa-handshake", provider_declined: "fa-times-circle", on_the_way: "fa-motorcycle", arrived: "fa-map-marker-alt", started: "fa-tools", materials: "fa-shopping-cart", paused: "fa-pause-circle", resumed: "fa-play-circle", note: "fa-comment", completion_requested: "fa-clipboard-check", disputed: "fa-flag", completed: "fa-flag-checkered", cancelled: "fa-ban", photos: "fa-camera" };
+
+function closeTrack() { shTrackJobId = null; document.getElementById("track-modal").classList.remove("active"); }
+
+async function openTrack(jobId) {
+  if (!requireLogin()) return;
+  shTrackJobId = jobId;
+  const body = document.getElementById("track-body");
+  body.innerHTML = `<div class="sh-loading"><i class="fas fa-spinner fa-spin"></i> Loading job progress...</div>`;
+  document.getElementById("track-modal").classList.add("active");
+  const data = await shApi(`/jobs/${jobId}/track`).catch(() => ({ success: false }));
+  if (shTrackJobId !== jobId) return;
+  if (!data.success) { body.innerHTML = `<div class="sh-loading">${shEsc(data.message || "Could not load job tracking")}</div>`; return; }
+  const job = data.job, tl = data.timeline || [];
+  const isProvider = currentUser.uid === job.assignedProviderId;
+  const stage = SHT_STAGE_OF[job.status] ?? 0;
+  const pct = job.status === "cancelled" ? 0 : (stage / (SHT_STAGES.length - 1)) * 84;
+  document.getElementById("track-title").innerHTML = `<i class="fas fa-route" style="color:var(--primary);margin-right:8px"></i>${shEsc(job.title)}`;
+  const canUpdate = ["in-progress", "pending-completion"].includes(job.status);
+  const quick = isProvider && job.status === "in-progress"
+    ? `<div class="sht-quick">${[["on_the_way", "🛵 On my way"], ["arrived", "📍 Arrived"], ["started", "🔧 Started work"], ["materials", "🛒 Buying materials"], ["paused", "⏸ Paused"], ["resumed", "▶ Resumed"]].map(([c, l]) => `<button type="button" onclick="postTrackUpdate('${job.id}','${c}')">${l}</button>`).join("")}</div>` : "";
+  body.innerHTML = `
+    ${job.status === "cancelled" ? `<div class="sh-assigned" style="margin:0 0 14px;background:#eee;color:#555">This job was cancelled.</div>` : `
+    <div class="sht-steps"><div class="sht-bar" style="width:${pct}%"></div>
+      ${SHT_STAGES.map(([ic, label], i) => `<div class="sht-step ${i < stage || job.status === "completed" ? "done" : i === stage ? "now" : ""}"><div class="sht-dot"><i class="fas ${i < stage || job.status === "completed" ? "fa-check" : ic}"></i></div>${label}</div>`).join("")}
+    </div>`}
+    <div class="sh-meta" style="margin-bottom:12px">
+      ${job.assignedProviderName ? `<span><i class="fas fa-user-cog"></i> ${shEsc(job.assignedProviderName)}</span>` : ""}
+      <span><i class="fas fa-user"></i> ${shEsc(job.clientName || "Client")}</span>
+      ${job.acceptedAmount ? `<span><i class="fas fa-money-bill-wave"></i> ${shKES(job.acceptedAmount)}</span>` : ""}
+      ${job.plannedStartDate ? `<span><i class="far fa-calendar-check"></i> Start ${shDate(job.plannedStartDate)}</span>` : ""}
+    </div>
+    ${canUpdate ? `<div style="margin-bottom:16px">${quick}
+      <textarea id="track-note" maxlength="300" placeholder="${isProvider ? "Add a progress note for the client (optional)..." : "Add a note for the provider..."}"></textarea>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;flex-wrap:wrap">
+        ${job.conversationId ? `<button class="sh-btn ghost" onclick="closeTrack();openJobChat('${job.conversationId}','${shEsc(isProvider ? job.clientName || "Client" : job.assignedProviderName || "Provider").replace(/'/g, "")}')"><i class="fas fa-comments"></i> Job Chat</button>` : ""}
+        <button class="sh-btn pri" onclick="postTrackUpdate('${job.id}','note')"><i class="fas fa-paper-plane"></i> Post Note</button>
+        ${isProvider && job.status === "in-progress" ? `<button class="sh-btn ok" onclick="closeTrack();requestJobCompletion('${job.id}')"><i class="fas fa-check"></i> Work Done</button>` : ""}
+      </div></div>` : ""}
+    <h4 style="margin:0 0 10px;font-size:.95rem">Activity</h4>
+    <ul class="sht-tl">${tl.length ? [...tl].reverse().map((e, i) => `<li class="${i === 0 ? "latest" : ""}"><b><i class="fas ${SHT_ICON[e.type] || "fa-circle"}" style="color:var(--primary);margin-right:6px"></i>${shEsc(e.label)}</b>
+      <small>${e.at ? new Date(e.at).toLocaleString("en-KE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}${e.byName ? " · " + shEsc(e.byName) : ""}</small>
+      ${e.note ? `<div class="sht-note">${shEsc(e.note)}</div>` : ""}</li>`).join("") : `<li><small>No activity yet.</small></li>`}</ul>`;
+}
+
+async function postTrackUpdate(jobId, code) {
+  const noteEl = document.getElementById("track-note");
+  const note = noteEl ? noteEl.value.trim() : "";
+  if (code === "note" && !note) { showNotification("Write a short note first", "info"); return; }
+  const data = await shApi(`/jobs/${jobId}/updates`, { method: "POST", body: JSON.stringify({ code, note }) }).catch(() => ({ success: false }));
+  showNotification(data.success ? "Update shared." : data.message || "Could not post the update", data.success ? "success" : "error");
+  if (data.success) openTrack(jobId);
+}
+
+/* live: refresh the tracker when the other side posts an update */
+setInterval(() => {
+  if (typeof socket !== "undefined" && socket && !socket.__shTrackHooked) {
+    socket.__shTrackHooked = true;
+    socket.on("notification", (n) => { if (n && n.jobId && n.jobId === shTrackJobId) openTrack(n.jobId); });
+  }
+}, 3000);

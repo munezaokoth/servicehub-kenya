@@ -4121,10 +4121,7 @@ z-index: 1;
                             <div class="job-price" id="detail-job-price">KES 0 - 0</div>
                         </div>
                         <div class="job-body">
-                            <div class="job-detail-images">
-                                <img src="https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80" alt="Job Image" class="job-detail-image" onclick="openImageModal(this.src)">
-                                <img src="https://images.unsplash.com/photo-1621905252507-b35492cc74b4?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80" alt="Job Image" class="job-detail-image" onclick="openImageModal(this.src)">
-                            </div>
+                            <div class="job-detail-images" id="detail-job-images"></div>
                             <div class="job-detail-section">
                                 <h3 class="job-detail-section-title">Job Description</h3>
                                 <p id="detail-job-description">Service request details will appear here when real subscribers post jobs. The system is fully functional and ready for real users.</p>
@@ -4424,6 +4421,11 @@ z-index: 1;
           <div class="form-group">
             <label class="form-label">Job Description *</label>
             <textarea id="job-description" class="form-control" rows="4" placeholder="Describe the job in detail — what needs to be done, any specific requirements, timeline..."></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Photos of the job <span style="font-weight:400;color:var(--medium-gray)">(optional, up to 6)</span></label>
+            <div class="shp-picker" id="job-photo-picker"></div>
+            <small style="color:var(--medium-gray)">Clear photos of the problem help providers quote accurately.</small>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;">
             <div class="form-group">
@@ -6168,6 +6170,6 @@ function renderJobs(jobs = []) {
         document.addEventListener('DOMContentLoaded', init);
     </script>
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-    <script src="/dashboard-v2.js?v=1795030290"></script>
+    <script src="/dashboard-v2.js?v=1795030499"></script>
 </body>
 </html>

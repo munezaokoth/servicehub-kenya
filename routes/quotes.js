@@ -89,6 +89,7 @@ router.post(
       // Increment job quotesCount
       await jobDoc.ref.update({
         quotesCount: admin.firestore.FieldValue.increment(1),
+        timeline: admin.firestore.FieldValue.arrayUnion({ id: uuidv4(), type: "quote", label: `Quote received from ${req.user.name}`, note: `KES ${Number(amount).toLocaleString()}`, byId: req.user.uid, byName: req.user.name, at: now }),
       });
 
       // Real-time: the client's dashboard refreshes and shows the new quote under the job
@@ -170,6 +171,7 @@ router.put("/:id/accept", verifyJWT, async (req, res) => {
       acceptedAmount: quote.amount,
       offeredAt: now,
       updatedAt: now,
+      timeline: admin.firestore.FieldValue.arrayUnion({ id: uuidv4(), type: "offered", label: `Quote accepted · offer sent to ${quote.providerName}`, note: `KES ${Number(quote.amount).toLocaleString()}`, byId: req.user.uid, byName: req.user.name, at: now }),
     });
     await batch.commit();
 
