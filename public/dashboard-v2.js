@@ -295,8 +295,8 @@ async function loadMyAssignedJobs(opts = {}) {
   const data = await shApi("/jobs/my/assigned").catch(() => ({ success: false }));
   if (!data.success) { panel.innerHTML = `<div class="sh-loading">Could not load your jobs. <button class="sh-btn ghost" onclick="loadMyAssignedJobs()">Try again</button></div>`; return; }
   const jobs = data.jobs || [];
-  const offers = jobs.filter((j) => j.status === "awaiting-provider");
-  const working = jobs.filter((j) => j.status !== "awaiting-provider");
+  const offers = jobs.filter((j) => j.status === "awaiting-provider" || (j.acceptedQuoteId && !j.providerAcceptedAt && j.status !== "in-progress" && j.status !== "pending-completion"));
+  const working = jobs.filter((j) => !offers.includes(j));
   const today = new Date().toISOString().slice(0, 10);
   const meta = (job) => `<div class="sh-meta"><span><i class="fas fa-map-marker-alt"></i> ${shEsc(job.county)}${job.subcounty ? ", " + shEsc(job.subcounty) : ""}</span>
         <span><i class="fas fa-money-bill-wave"></i> ${shKES(job.acceptedAmount || job.budgetMin)}</span><span><i class="fas fa-user"></i> ${shEsc(job.clientName || "Client")}</span></div>`;

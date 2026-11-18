@@ -72,8 +72,15 @@ app.use("/api", (req, res) => res.status(404).json({ success: false, message: `R
 
 // ── Website (same origin as the API, so no CORS or URL mismatch) ──────────
 const PUBLIC_DIR = path.join(__dirname, "public");
-app.use(express.static(PUBLIC_DIR, { extensions: ["html"], maxAge: "1h" }));
-app.get("*", (req, res) => res.sendFile(path.join(PUBLIC_DIR, "index.html")));
+// HTML/JS/CSS are always re-checked so every deploy reaches users immediately (no stale dashboard code)
+app.use(express.static(PUBLIC_DIR, {
+  extensions: ["html"],
+  setHeaders: (res, filePath) => {
+    if (/\.(html|js|css)$/.test(filePath)) res.setHeader("Cache-Control", "no-cache");
+    else res.setHeader("Cache-Control", "public, max-age=86400");
+  },
+}));
+app.get("*", (req, res) => { res.setHeader("Cache-Control", "no-cache"); res.sendFile(path.join(PUBLIC_DIR, "index.html")); });
 
 app.use((err, req, res, next) => {
   console.error("Error:", err);
