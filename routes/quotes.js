@@ -84,6 +84,9 @@ router.post(
         quotesCount: admin.firestore.FieldValue.increment(1),
       });
 
+      // Real-time: the client's dashboard refreshes and shows the new quote under the job
+      try { const { getIO } = require("../utils/socket"); const io = getIO(); if (io) io.to(`user:${job.clientId}`).emit("notification", { type: "new_quote", jobId, quoteId }); } catch (e) {}
+
       // Notify client (non-blocking)
       sendQuoteReceivedEmail({
         clientEmail: job.clientEmail,

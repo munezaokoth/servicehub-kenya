@@ -25,8 +25,19 @@ function validationErrors(req, res) {
 
 router.get("/my/posted", verifyJWT, async (req, res) => {
   try {
-    const snap = await firebase.db.collection(firebase.COLLECTIONS.JOBS).where("clientId", "==", req.user.uid).get();
-    const jobs = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort(byDate());
+    const [snap, qSnap] = await Promise.all([
+      firebase.db.collection(firebase.COLLECTIONS.JOBS).where("clientId", "==", req.user.uid).get(),
+      firebase.db.collection(firebase.COLLECTIONS.QUOTES).where("clientId", "==", req.user.uid).get(),
+    ]);
+    const byJob = {};
+    qSnap.docs.forEach((d) => { const q = { id: d.id, ...d.data() }; (byJob[q.jobId] = byJob[q.jobId] || []).push(q); });
+    const jobs = snap.docs.map((d) => {
+      const job = { id: d.id, ...d.data() };
+      const quotes = (byJob[job.id] || []).filter((q) => q.status !== "withdrawn").sort((a, b) => Number(a.amount || 0) - Number(b.amount || 0));
+      job.quotesCount = quotes.length;
+      job.quotes = job.status === "completed" ? [] : quotes; // quotes are shown until the job is completed
+      return job;
+    }).filter((j) => j.status !== "cancelled").sort(byDate());
     return res.json({ success: true, jobs });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Could not fetch your jobs" });
@@ -37,7 +48,7 @@ router.get("/my/posted", verifyJWT, async (req, res) => {
 router.get("/my/assigned", verifyJWT, async (req, res) => {
   try {
     const snap = await firebase.db.collection(firebase.COLLECTIONS.JOBS).where("assignedProviderId", "==", req.user.uid).get();
-    const jobs = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort(byDate("updatedAt"));
+    const jobs = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((j) => j.status !== "completed" && j.status !== "cancelled").sort(byDate("updatedAt"));
     return res.json({ success: true, jobs });
   } catch (error) {
     console.error("Assigned jobs error:", error);
@@ -68,13 +79,7 @@ router.put("/:id/request-completion", verifyJWT, async (req, res) => {
   }
 });
 
-// ── Client: confirm completion → job completed, provider payout queued ────
-router.put("/:id/confirm-completion", verifyJWT, async (req, res) => {
-  try {
-    const doc = await loadJob(req, res); if (!doc) return;
-    const job = doc.data();
-    if (job.clientId !== req.user.uid) return res.status(403).json({ success: false, message: "Only the client can confirm completion" });
-    if (job.status !== "pending-completion") return res.status(400).json({ success: false, message: "The provider has not marked this job complete yet" });
+async function completeJob(doc, job) {
     const now = new Date().toISOString();
     const amount = Number(job.acceptedAmount || 0);
     const share = parseFloat(process.env.PROVIDER_SHARE || "0.8");
@@ -89,12 +94,41 @@ router.put("/:id/confirm-completion", verifyJWT, async (req, res) => {
         status: "pending", createdAt: now, updatedAt: now,
       });
     }
+    // close any quotes still pending
+    const pend = await firebase.db.collection(firebase.COLLECTIONS.QUOTES).where("jobId", "==", doc.id).get();
+    pend.docs.forEach((q) => { if (q.data().status === "pending") batch.update(q.ref, { status: "closed", updatedAt: now }); });
     await batch.commit();
     notify(job.assignedProviderId, "completion_confirmed", { jobId: doc.id, title: job.title });
+}
+
+// ── Client: confirm a completion the provider requested ───────────────────
+router.put("/:id/confirm-completion", verifyJWT, async (req, res) => {
+  try {
+    const doc = await loadJob(req, res); if (!doc) return;
+    const job = doc.data();
+    if (job.clientId !== req.user.uid) return res.status(403).json({ success: false, message: "Only the client can confirm completion" });
+    if (job.status !== "pending-completion") return res.status(400).json({ success: false, message: "The provider has not marked this job complete yet" });
+    await completeJob(doc, job);
     return res.json({ success: true, message: "Job confirmed as completed. Payment released." });
   } catch (error) {
     console.error("Confirm completion error:", error);
     return res.status(500).json({ success: false, message: "Could not confirm completion" });
+  }
+});
+
+// ── Client: mark own job as completed at any time ─────────────────────────
+router.put("/:id/complete", verifyJWT, async (req, res) => {
+  try {
+    const doc = await loadJob(req, res); if (!doc) return;
+    const job = doc.data();
+    if (job.clientId !== req.user.uid) return res.status(403).json({ success: false, message: "Only the client who posted this job can mark it completed" });
+    if (job.status === "completed") return res.status(400).json({ success: false, message: "This job is already completed" });
+    if (job.status === "cancelled") return res.status(400).json({ success: false, message: "This job was cancelled" });
+    await completeJob(doc, job);
+    return res.json({ success: true, message: "Job marked as completed." });
+  } catch (error) {
+    console.error("Complete job error:", error);
+    return res.status(500).json({ success: false, message: "Could not mark the job as completed" });
   }
 });
 
@@ -119,7 +153,8 @@ router.get("/", optionalAuth, async (req, res) => {
   try {
     const { category, county, subcounty, budgetMin, budgetMax, status = "open", limit = 20, search } = req.query;
     let q = firebase.db.collection(firebase.COLLECTIONS.JOBS);
-    if (status && status !== "all") q = q.where("status", "==", status);
+    const wanted = (!status || status === "all" || status === "completed" || status === "cancelled") ? "open" : status;
+    q = q.where("status", "==", wanted); // completed jobs are private to the client who posted them
     const snapshot = await q.limit(500).get();
     let jobs = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     if (category && category !== "all") jobs = jobs.filter((j) => j.category === category);
@@ -140,8 +175,12 @@ router.get("/:id", optionalAuth, async (req, res) => {
   try {
     const doc = await firebase.db.collection(firebase.COLLECTIONS.JOBS).doc(req.params.id).get();
     if (!doc.exists) return res.status(404).json({ success: false, message: "Job not found" });
-    doc.ref.update({ views: (doc.data().views || 0) + 1 }).catch(() => {});
-    return res.json({ success: true, job: { id: doc.id, ...doc.data() } });
+    const job = doc.data();
+    if ((job.status === "completed" || job.status === "cancelled") && (!req.user || req.user.uid !== job.clientId)) {
+      return res.status(404).json({ success: false, message: "Job not found" });
+    }
+    doc.ref.update({ views: (job.views || 0) + 1 }).catch(() => {});
+    return res.json({ success: true, job: { id: doc.id, ...job } });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Could not fetch job" });
   }
