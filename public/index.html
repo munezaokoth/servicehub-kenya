@@ -4198,7 +4198,8 @@ z-index: 1;
                     <div class="chat-main">
                         <div class="chat-header">
                             <div class="chat-user-info">
-                                <div class="chat-user-avatar">SH</div>
+                                <button class="shc-back" type="button" onclick="closeChatView()" aria-label="Back to conversations"><i class="fas fa-arrow-left"></i></button>
+                                <div class="chat-user-avatar" id="current-chat-avatar">SH</div>
                                 <div>
                                     <div class="chat-user-name" id="current-chat-user">ServiceHub Kenya</div>
                                     <div class="chat-user-status" id="current-chat-status">Ready to Chat</div>
@@ -4234,14 +4235,14 @@ z-index: 1;
                             </div>
                         </div>
                         <div class="chat-input">
-                            <input type="text" class="chat-input-field" id="chat-input" placeholder="Select a conversation to start messaging..." disabled oninput="handleTyping()">
+                            <textarea class="chat-input-field" id="chat-input" rows="1" placeholder="Select a conversation to start messaging..." disabled oninput="handleTyping()"></textarea>
                             <button class="btn btn-primary" id="send-message" disabled>
                                 <i class="fas fa-paper-plane"></i>
                             </button>
                         </div>
                     </div>
                 </div>
-                <div class="text-center mt-4">
+                <div class="text-center mt-4 shc-backdash">
                     <button class="btn btn-outline" onclick="showSection('dashboard')">
                         <i class="fas fa-arrow-left"></i> Back to Dashboard
                     </button>
@@ -6141,7 +6142,6 @@ function renderJobs(jobs = []) {
             if (applyFilters) applyFilters.addEventListener('click', applyJobFilters);
             if (submitQuote) submitQuote.addEventListener('click', handleQuoteSubmission);
             if (sendMessage) sendMessage.addEventListener('click', handleSendMessage);
-            if (chatInput) chatInput.addEventListener('keypress', (e) => { if(e.key === 'Enter') handleSendMessage(); });
             if (postJobAction) postJobAction.addEventListener('click', () => postJobModal.classList.add('active'));
             if (cancelPostJob) cancelPostJob.addEventListener('click', () => postJobModal.classList.remove('active'));
             modalClose.forEach(btn => btn.addEventListener('click', function() { this.closest('.modal').classList.remove('active'); }));
@@ -6168,6 +6168,6 @@ function renderJobs(jobs = []) {
         document.addEventListener('DOMContentLoaded', init);
     </script>
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-    <script src="/dashboard-v2.js?v=1795029815"></script>
+    <script src="/dashboard-v2.js?v=1795030290"></script>
 </body>
 </html>
