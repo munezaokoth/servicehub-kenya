@@ -3,6 +3,7 @@
 
 const { Server } = require("socket.io");
 const jwt = require("jsonwebtoken");
+const calls = require("./calls");
 
 let ioRef = null;
 function getIO() { return ioRef; }
@@ -17,6 +18,7 @@ function initSocket(httpServer) {
     pingInterval: 25000,
     pingTimeout: 60000,
   });
+  calls.init(io);
 
   // Auth middleware
   io.use((socket, next) => {
@@ -110,36 +112,8 @@ function initSocket(httpServer) {
       } catch {}
     });
 
-    // ── WebRTC Signaling ────────────────────────────────────────────────
-    // Caller initiates call
-    socket.on("call_user", ({ conversationId, callType, callerName, offer }) => {
-      socket.to(`conversation:${conversationId}`).emit("incoming_call", {
-        callerName: name || callerName,
-        callType,
-        conversationId,
-        offer,
-      });
-    });
-
-    // Receiver answers
-    socket.on("answer_call", ({ conversationId, answer }) => {
-      socket.to(`conversation:${conversationId}`).emit("call_answered", { answer });
-    });
-
-    // Receiver rejects
-    socket.on("reject_call", ({ conversationId }) => {
-      socket.to(`conversation:${conversationId}`).emit("call_rejected");
-    });
-
-    // Either party ends call
-    socket.on("end_call", ({ conversationId }) => {
-      socket.to(`conversation:${conversationId}`).emit("call_ended");
-    });
-
-    // ICE candidate exchange
-    socket.on("webrtc_ice_candidate", ({ conversationId, candidate }) => {
-      socket.to(`conversation:${conversationId}`).emit("webrtc_ice_candidate", { candidate });
-    });
+    // ── Voice & video calls (WebRTC signalling) ─────────────────────────
+    calls.register(socket);
 
     // ── Presence ────────────────────────────────────────────────────────
     socket.on("disconnect", () => {

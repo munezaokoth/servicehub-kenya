@@ -18,6 +18,8 @@ const quoteRoutes    = require("./routes/quotes");
 const chatRoutes     = require("./routes/chat");
 const contactRoutes  = require("./routes/contact");
 const userRoutes     = require("./routes/users");
+const callRoutes     = require("./routes/calls");
+const { turnProvider } = require("./utils/ice");
 
 const app = express();
 const server = http.createServer(app);
@@ -54,6 +56,8 @@ app.get("/health", (req, res) => {
     firebase: fb,
     jwt: Boolean(process.env.JWT_SECRET),
     email: Boolean(process.env.RESEND_API_KEY),
+    // Calls need a TURN relay to carry audio over Kenyan mobile data (see utils/ice.js)
+    callsTurn: turnProvider() || false,
     timestamp: new Date().toISOString(),
   });
 });
@@ -67,6 +71,7 @@ app.use("/api/quotes",   quoteRoutes);
 app.use("/api/chat",     chatRoutes);
 app.use("/api/contact",  contactLimiter, contactRoutes);
 app.use("/api/users",    userRoutes);
+app.use("/api/calls",    callRoutes);
 app.get("/api", (req, res) => res.json({ name: "ServiceHub Kenya API", status: "running", version: "2.0.0" }));
 app.use("/api", (req, res) => res.status(404).json({ success: false, message: `Route ${req.method} ${req.originalUrl} not found` }));
 
@@ -76,6 +81,7 @@ const PUBLIC_DIR = path.join(__dirname, "public");
 app.use(express.static(PUBLIC_DIR, {
   extensions: ["html"],
   setHeaders: (res, filePath) => {
+    if (filePath.endsWith("sw.js")) { res.setHeader("Service-Worker-Allowed", "/"); res.setHeader("Cache-Control", "no-cache, no-store"); return; }
     if (/\.(html|js|css)$/.test(filePath)) res.setHeader("Cache-Control", "no-cache");
     else res.setHeader("Cache-Control", "public, max-age=86400");
   },

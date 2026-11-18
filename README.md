@@ -16,8 +16,9 @@ npm start              # http://localhost:5000
 ## Deploy (Railway)
 1. New project → Deploy from GitHub repo → this repo.
 2. Variables: see `.env.example` (at minimum `JWT_SECRET`, `FIREBASE_SERVICE_ACCOUNT`, `FIREBASE_WEB_API_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`, `NODE_ENV=production`).
-3. Settings → Networking → Generate domain, then add the custom domain `servicehub.co.ke`.
-4. Check `https://<domain>/health` — every item should be `true` / `"ok": true`.
+3. Calls: add a TURN relay so call audio works on mobile data — `CLOUDFLARE_TURN_KEY_ID` + `CLOUDFLARE_TURN_API_TOKEN` (free, Cloudflare dashboard → Realtime → TURN). Push alerts that make phones ring need no setup.
+4. Settings → Networking → Generate domain, then add the custom domain `servicehub.co.ke`.
+5. Check `https://<domain>/health` — every item should be `true` / `"ok": true`.
 
 ## What changed in v2.0
 - Website + API merged into one service (no hard-coded backend URL, no CORS issues).
