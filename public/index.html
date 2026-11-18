@@ -42,7 +42,7 @@
           const data = await res.json();
           if (data.success) {
             window.setToken(data.token);
-            window.currentUser = { ...data.user, loggedIn: true };
+            window.setCurrentUser({ ...data.user, loggedIn: true });
             window.updateAuthUI();
             window.showNotification('Welcome to ServiceHub Kenya!', 'success');
             setTimeout(() => window.showSection('dashboard'), 1000);
@@ -4651,10 +4651,54 @@ z-index: 1;
         const API_BASE = BACKEND_ORIGIN + "/api";
         window.API_BASE = API_BASE;
 
-function getToken() { return localStorage.getItem("sh_token"); }
-function setToken(t) { localStorage.setItem("sh_token", t); }
+// Session token: kept in memory AND localStorage, so a blocked/cleared storage never
+// leaves the page showing you as signed in while actions say "sign in first".
+let _shToken = null;
+function getToken() { try { return _shToken || localStorage.getItem("sh_token"); } catch (e) { return _shToken; } }
+function setToken(t) { _shToken = t; try { localStorage.setItem("sh_token", t); } catch (e) {} }
         window.setToken = setToken;
-function clearToken() { localStorage.removeItem("sh_token"); }
+function clearToken() { _shToken = null; try { localStorage.removeItem("sh_token"); } catch (e) {} }
+
+// Show the sign-in page (used when an action needs an account and the session is gone)
+function requireLogin(msg) {
+  if (getToken()) return true;
+  if (typeof currentUser !== "undefined" && currentUser.loggedIn) {
+    currentUser = { name: "Guest", email: "", phone: "", role: "guest", loggedIn: false, emailVerified: false };
+    if (typeof updateAuthUI === "function") updateAuthUI();
+  }
+  showNotification(msg || 'Please sign in first', 'error');
+  if (typeof showSection === "function") showSection('auth');
+  return false;
+}
+
+// If the server says the session is no longer valid, sign out cleanly instead of failing silently
+(function () {
+  const _fetch = window.fetch.bind(window);
+  window.fetch = async function (input, init) {
+    const res = await _fetch(input, init);
+    try {
+      const url = typeof input === "string" ? input : (input && input.url) || "";
+      const hasAuth = init && init.headers && (init.headers.Authorization || init.headers.authorization);
+      if (res.status === 401 && hasAuth && url.includes("/api/") && !url.includes("/auth/login")) {
+        clearToken();
+        if (typeof currentUser !== "undefined" && currentUser.loggedIn) {
+          currentUser = { name: "Guest", email: "", phone: "", role: "guest", loggedIn: false, emailVerified: false };
+          if (typeof updateAuthUI === "function") updateAuthUI();
+          showNotification('Your session has expired. Please sign in again.', 'error');
+          if (typeof showSection === "function") showSection('auth');
+        }
+      }
+    } catch (e) {}
+    return res;
+  };
+})();
+
+// Keep tabs in sync: signing out in one tab signs out the others
+window.addEventListener('storage', (e) => {
+  if (e.key !== 'sh_token') return;
+  if (!e.newValue) { _shToken = null; if (typeof currentUser !== "undefined" && currentUser.loggedIn) { currentUser = { name: "Guest", email: "", phone: "", role: "guest", loggedIn: false, emailVerified: false }; updateAuthUI(); } }
+  else { _shToken = e.newValue; if (typeof restoreSession === "function") restoreSession(); }
+});
         // ===== APP DATA =====
         const sampleJobs = [];
         let currentUser = {
@@ -5136,7 +5180,7 @@ function renderJobs(jobs = []) {
         async function handleSendMessage() {
             const text = chatInput.value.trim();
             if (!text) return;
-            if (!getToken()) { showNotification('Please sign in first', 'error'); return; }
+            if (!requireLogin()) return;
             const convIdEl = document.getElementById('active-conversation-id');
             const conversationId = convIdEl ? convIdEl.value : null;
             if (!conversationId) { showNotification('Select a conversation first', 'info'); return; }
@@ -5158,7 +5202,7 @@ function renderJobs(jobs = []) {
             }
         }
         function startNewConversation() {
-            if (!getToken()) { showNotification('Please sign in first', 'error'); return; }
+            if (!requireLogin()) return;
             document.getElementById('new-chat-uid').value = '';
             document.getElementById('new-chat-jobid').value = '';
             document.getElementById('new-chat-modal').classList.add('active');
@@ -5278,12 +5322,15 @@ function renderJobs(jobs = []) {
                 });
                 const data = await res.json();
                 if (data.success) {
+                    _shToken = token;
                     currentUser = { ...data.user, loggedIn: true };
                     updateAuthUI();
                     initSocket();
+                } else {
+                    clearToken();
                 }
             } catch (err) {
-                clearToken();
+                // network hiccup: keep the token and try again on the next page load
             }
         }
 
@@ -5644,7 +5691,7 @@ function renderJobs(jobs = []) {
         }
 
                 function openProfileSettings() {
-            if (!getToken()) { showNotification('Please sign in first', 'error'); return; }
+            if (!requireLogin()) return;
             const modal = document.getElementById('profile-settings-modal');
             // Populate fields with current user data
             document.getElementById('profile-name').value = currentUser.name || '';
@@ -6136,6 +6183,7 @@ function renderJobs(jobs = []) {
         window.showSection = showSection;
         window.showNotification = showNotification;
         window.currentUser = currentUser;
+        window.setCurrentUser = (u) => { currentUser = u; window.currentUser = u; if (typeof initSocket === 'function') initSocket(); };
 
         document.addEventListener('DOMContentLoaded', init);
     </script>
