@@ -223,7 +223,8 @@ function openQuote(jobId, quoteId) {
     ${q.estimatedDays ? `<div class="sh-qd-row"><span>Estimated time</span><span>${q.estimatedDays} day(s)</span></div>` : ""}
     <div class="sh-qd-row"><span>Submitted</span><span>${shDate(q.createdAt)}</span></div>
     <div class="sh-qd-row"><span>Status</span>${shChip(SH_QSTATUS, q.status)}</div>
-    <div class="sh-qd-msg">${q.message ? shEsc(q.message) : "<i>No message included with this quote.</i>"}</div>`;
+    <div class="sh-qd-msg">${q.message ? shEsc(q.message) : "<i>No message included with this quote.</i>"}</div>
+    <p style="margin-top:12px;font-size:.82rem;color:var(--medium-gray)"><i class="fas fa-info-circle"></i> ServiceHub is free. You pay the provider directly for the work. We don't charge fees or handle payments.</p>`;
   const foot = [];
   foot.push(`<button class="sh-btn ghost" onclick="messageProvider('${q.providerId}','${job.id}')"><i class="fas fa-comments"></i> Message Provider</button>`);
   if (q.status === "pending" && job.status === "open") {
@@ -316,7 +317,7 @@ async function loadMyAssignedJobs(opts = {}) {
 async function providerAcceptJob(jobId) {
   const d = document.getElementById("start-" + jobId);
   const startDate = d && d.value ? d.value : undefined;
-  if (!confirm(`Accept this job${startDate ? " and start on " + startDate : ""}? The client will be notified and a job chat will open.`)) return;
+  if (!confirm(`Accept this job${startDate ? " and start on " + startDate : ""}? The client will be notified and a job chat will open. Agree on payment directly with the client; ServiceHub charges nothing.`)) return;
   const data = await shApi(`/jobs/${jobId}/provider-accept`, { method: "PUT", body: JSON.stringify({ startDate }) }).catch(() => ({ success: false }));
   showNotification(data.success ? "Job accepted! The client has been notified. Agree on the details in the job chat." : data.message || "Could not accept the job", data.success ? "success" : "error");
   loadMyAssignedJobs({ quiet: true }); loadDashboardStats();
@@ -362,3 +363,40 @@ document.addEventListener("click", (e) => {
   const dd = document.getElementById("user-dropdown") || item.closest(".dropdown-menu, .user-dropdown");
   if (dd) dd.classList.remove("show");
 });
+
+/* ---------- ACCOUNT folder inside the dashboard ---------- */
+function loadAccountPanel(opts = {}) {
+  if (!requireLogin()) return;
+  shGoDashboard();
+  const u = currentUser || {};
+  const initials = String(u.name || "U").split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+  const tile = (icon, title, desc, action, danger) => `<div class="sh-q" role="button" tabindex="0" onclick="${action}" onkeydown="if(event.key==='Enter'){${action}}" style="padding:16px;${danger ? "border-color:#f5c2c2" : ""}">
+      <div style="display:flex;gap:14px;align-items:center"><i class="fas ${icon}" style="font-size:1.4rem;width:28px;text-align:center;color:${danger ? "#c62828" : "var(--primary)"}"></i>
+      <div><b style="${danger ? "color:#c62828" : ""}">${title}</b><br><small>${desc}</small></div></div><i class="fas fa-chevron-right" style="color:var(--medium-gray)"></i></div>`;
+  const panel = shPanel();
+  panel.innerHTML = `
+    <div class="sh-panel-head"><h2><i class="fas fa-user-circle" style="color:var(--primary)"></i> My Account</h2>
+      <button class="sh-btn ghost" onclick="loadDashboardPanel()"><i class="fas fa-arrow-left"></i> Back to My Jobs</button></div>
+    <div class="sh-job"><div class="sh-job-top" style="align-items:center;justify-content:flex-start;gap:16px">
+      <div style="width:64px;height:64px;border-radius:50%;background:var(--gradient-primary,var(--primary));color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:800;flex:0 0 64px">${shEsc(initials)}</div>
+      <div><h3 style="margin:0">${shEsc(u.name || "")}</h3>
+        <div class="sh-meta"><span><i class="fas fa-envelope"></i> ${shEsc(u.email || "")}</span>${u.phone ? `<span><i class="fas fa-phone"></i> ${shEsc(u.phone)}</span>` : ""}
+        ${u.county ? `<span><i class="fas fa-map-marker-alt"></i> ${shEsc(u.county)}</span>` : ""}</div>
+        <div style="margin-top:6px">${shChip({ client: ["Client", "#1565c0", "#e3f2fd"], "service-provider": ["Service Provider", "#2e7d32", "#e8f5e9"] }, u.role)}</div></div></div></div>
+    <div style="display:grid;gap:10px">
+      ${tile("fa-user-edit", "Edit Profile", "Name, phone, county, bio" + (u.role === "service-provider" ? " and skills" : ""), "openProfileSettings()")}
+      ${tile("fa-comments", "Messages", "Chats with clients and providers", "showSection('chat')")}
+      ${tile("fa-envelope-open-text", "Email Settings", "Choose which emails you receive", "showSection('email-settings')")}
+      ${tile("fa-key", "Change Password", "We'll email you a secure reset link", "accountPasswordReset()")}
+      ${tile("fa-sign-out-alt", "Log Out", "Sign out of ServiceHub on this device", "handleLogout()", true)}
+    </div>`;
+  if (!opts.quiet) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+async function accountPasswordReset() {
+  const email = currentUser && currentUser.email;
+  if (!email) return;
+  if (!confirm(`Send a password reset link to ${email}?`)) return;
+  const res = await fetch(`${API_BASE}/auth/password-reset`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) }).catch(() => null);
+  const data = res ? await res.json().catch(() => ({})) : {};
+  showNotification(data.success ? "Reset link sent. Check your email (and spam folder)." : data.message || "Could not send the reset link", data.success ? "success" : "error");
+}

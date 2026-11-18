@@ -81,18 +81,10 @@ router.put("/:id/request-completion", verifyJWT, async (req, res) => {
 
 async function completeJob(doc, job) {
     const now = new Date().toISOString();
-    const amount = Number(job.acceptedAmount || 0);
-    const share = parseFloat(process.env.PROVIDER_SHARE || "0.8");
     const batch = firebase.db.batch();
     batch.update(doc.ref, { status: "completed", completedAt: now, updatedAt: now });
     if (job.assignedProviderId) {
       batch.update(firebase.db.collection(firebase.COLLECTIONS.USERS).doc(job.assignedProviderId), { jobsCompleted: admin.firestore.FieldValue.increment(1) });
-      const payoutId = uuidv4();
-      batch.set(firebase.db.collection(firebase.COLLECTIONS.PAYOUTS).doc(payoutId), {
-        id: payoutId, jobId: doc.id, jobTitle: job.title, providerId: job.assignedProviderId, providerName: job.assignedProviderName || null,
-        jobAmount: amount, providerShare: share, payoutAmount: Math.round(amount * share), paymentStatus: job.paymentStatus || "unpaid",
-        status: "pending", createdAt: now, updatedAt: now,
-      });
     }
     // close any quotes still pending
     const pend = await firebase.db.collection(firebase.COLLECTIONS.QUOTES).where("jobId", "==", doc.id).get();

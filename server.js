@@ -15,7 +15,6 @@ const { apiLimiter, authLimiter, contactLimiter } = require("./middleware/rateLi
 const authRoutes     = require("./routes/auth");
 const jobRoutes      = require("./routes/jobs");
 const quoteRoutes    = require("./routes/quotes");
-const paymentRoutes  = require("./routes/payments");
 const chatRoutes     = require("./routes/chat");
 const contactRoutes  = require("./routes/contact");
 const userRoutes     = require("./routes/users");
@@ -55,7 +54,6 @@ app.get("/health", (req, res) => {
     firebase: fb,
     jwt: Boolean(process.env.JWT_SECRET),
     email: Boolean(process.env.RESEND_API_KEY),
-    mpesa: Boolean(process.env.MPESA_CONSUMER_KEY),
     timestamp: new Date().toISOString(),
   });
 });
@@ -65,7 +63,7 @@ app.use("/api", apiLimiter);
 app.use("/api/auth",     authLimiter, authRoutes);
 app.use("/api/jobs",     jobRoutes);
 app.use("/api/quotes",   quoteRoutes);
-app.use("/api/payments", paymentRoutes);
+// Payments are switched off: ServiceHub is free and does not handle money.
 app.use("/api/chat",     chatRoutes);
 app.use("/api/contact",  contactLimiter, contactRoutes);
 app.use("/api/users",    userRoutes);

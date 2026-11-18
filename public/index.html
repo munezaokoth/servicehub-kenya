@@ -2829,34 +2829,11 @@ z-index: 1;
                     <a href="#" class="nav-link" data-section="about-us">About Us</a>
                     <a href="#" class="nav-link" data-section="how-it-works">How It Works</a>
                     <a href="#" class="nav-link" data-section="find-services">Find Services</a>
+                    <a href="#" class="nav-link dashboard-nav-link" data-section="dashboard" style="display:none;">Dashboard</a>
                     <a href="#" class="nav-link" data-section="contact">Contact Us</a>
                     <a href="#" class="nav-link" data-section="auth" id="login-nav-link">Login</a>
                 </nav>
                 
-                <div class="auth-buttons" id="auth-buttons-container">
-                    <div class="dropdown">
-                        <button class="btn btn-primary" id="user-menu" style="display: none;">
-                            <i class="fas fa-user-circle"></i> Account
-                        </button>
-                        <div class="dropdown-content" id="user-dropdown">
-                            <a href="#" class="dropdown-item" data-section="dashboard">
-                                <i class="fas fa-tachometer-alt"></i> Dashboard
-                            </a>
-                            <a href="#" class="dropdown-item" data-section="chat">
-                                <i class="fas fa-comments"></i> Messages
-                            </a>
-                            <a href="#" class="dropdown-item" data-section="email-settings">
-                                <i class="fas fa-envelope"></i> Email Settings
-                            </a>
-                            <a href="#" class="dropdown-item" onclick="openProfileSettings()">
-                                <i class="fas fa-user-cog"></i> Profile Settings
-                            </a>
-                            <div class="dropdown-item" onclick="handleLogout()">
-                                <i class="fas fa-sign-out-alt"></i> Logout
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
     </header>
@@ -3582,43 +3559,43 @@ z-index: 1;
                 <div class="section-title">
                     <h2>How ServiceHub Works</h2>
                     <p>Simple steps to get the service you need anywhere in Kenya</p>
+                    <p style="display:inline-block;margin-top:12px;padding:8px 18px;border-radius:999px;background:#e8f5e9;color:#2e7d32;font-weight:700;"><i class="fas fa-gift" style="margin-right:6px;"></i>100% free for clients and service providers. No fees, no commissions.</p>
                 </div>
                 <div class="steps-container">
                     <div class="step active">
                         <div class="step-number">1</div>
-                        <h3 class="step-title">Post a Job</h3>
-                        <p class="step-description">Describe your service need and upload photos if needed</p>
+                        <h3 class="step-title">Post a Job — Free</h3>
+                        <p class="step-description">Describe what you need, your location and budget. Posting is free.</p>
                     </div>
                     <div class="step">
                         <div class="step-number">2</div>
-                        <h3 class="step-title">Get Quotes</h3>
-                        <p class="step-description">Service providers review your job and submit their quotes</p>
+                        <h3 class="step-title">Get Free Quotes</h3>
+                        <p class="step-description">Service providers near you send their quotes at no cost to them or you.</p>
                     </div>
                     <div class="step">
                         <div class="step-number">3</div>
-                        <h3 class="step-title">Choose Provider</h3>
-                        <p class="step-description">Compare quotes and profiles, then select the best fit</p>
+                        <h3 class="step-title">Compare &amp; Choose</h3>
+                        <p class="step-description">Open each quote, chat with providers, then accept the one that suits you.</p>
                     </div>
                     <div class="step">
                         <div class="step-number">4</div>
-                        <h3 class="step-title">Deposit Payment</h3>
-                        <p class="step-description">Client deposits agreed amount to platform escrow for security</p>
+                        <h3 class="step-title">Provider Accepts</h3>
+                        <p class="step-description">The provider confirms the job and sets a start date. A job chat opens for both of you.</p>
                     </div>
-                    <!-- Steps 5, 6, and 7 now have animated flowing colors - this is the ONLY change -->
                     <div class="step">
                         <div class="step-number">5</div>
                         <h3 class="step-title">Get It Done</h3>
-                        <p class="step-description">Service provider completes the job to satisfaction</p>
+                        <p class="step-description">The provider does the work while you keep in touch through the job chat.</p>
                     </div>
                     <div class="step">
                         <div class="step-number">6</div>
-                        <h3 class="step-title">Client Verification</h3>
-                        <p class="step-description">Client approves job completion for payment release</p>
+                        <h3 class="step-title">Pay the Provider Directly</h3>
+                        <p class="step-description">Pay the agreed amount straight to the provider by cash, M-Pesa or bank. ServiceHub takes no commission and never handles your money.</p>
                     </div>
                     <div class="step">
                         <div class="step-number">7</div>
-                        <h3 class="step-title">Provider Payment</h3>
-                        <p class="step-description">Platform releases payment after deducting 20% service charge</p>
+                        <h3 class="step-title">Mark as Completed</h3>
+                        <p class="step-description">Confirm the job is done. Completed jobs stay private in your dashboard.</p>
                     </div>
                 </div>
             </div>
@@ -4118,10 +4095,10 @@ z-index: 1;
                     </div>
                     <div class="action-card" id="profile-action">
                         <div class="action-icon">
-                            <i class="fas fa-user"></i>
+                            <i class="fas fa-user-circle"></i>
                         </div>
-                        <h3 class="action-title">My Profile</h3>
-                        <p class="action-description">Update your profile information and preferences</p>
+                        <h3 class="action-title">My Account</h3>
+                        <p class="action-description">Profile, messages, email settings and log out</p>
                     </div>
                 </div>
 
@@ -5230,11 +5207,11 @@ function renderJobs(jobs = []) {
                 <p>Last Updated: 2026</p>
                 <p>ServiceHub Kenya Limited ("ServiceHub", "we", "us", "our") respects your privacy and is committed to protecting your personal data. This Privacy Policy explains how we collect, use, and share information about you when you use our website, mobile application, and services.</p>
                 <h3>1. Information We Collect</h3>
-                <p>We collect information you provide directly to us, such as when you create an account, post a service request, submit a quote, or contact us. This may include your name, email address, phone number, location, and payment information.</p>
+                <p>We collect information you provide directly to us, such as when you create an account, post a service request, submit a quote, or contact us. This may include your name, email address, phone number and location. We do not collect or store payment card or bank details.</p>
                 <h3>2. How We Use Your Information</h3>
-                <p>We use your information to provide, maintain, and improve our services, to connect clients with service providers, to process payments, to communicate with you, and to protect the security and integrity of our platform.</p>
+                <p>We use your information to provide, maintain, and improve our services, to connect clients with service providers, to communicate with you, and to protect the security and integrity of our platform.</p>
                 <h3>3. Sharing of Information</h3>
-                <p>We share your information with service providers when you request a quote, with clients when you submit a quote, and with third-party service providers who assist us in operating our platform (e.g., payment processors, hosting services).</p>
+                <p>We share your information with service providers when you request a quote, with clients when you submit a quote, and with third-party service providers who assist us in operating our platform (e.g., hosting and email services).</p>
                 <h3>4. Data Security</h3>
                 <p>We implement appropriate technical and organizational measures to protect your personal data against unauthorized access, alteration, disclosure, or destruction.</p>
                 <h3>5. Your Rights</h3>
@@ -5256,10 +5233,10 @@ function renderJobs(jobs = []) {
                 <p>You agree to provide accurate information, to comply with all applicable laws, and not to use the platform for any illegal or unauthorized purpose. You are solely responsible for your interactions with other users.</p>
                 <h3>4. Service Requests and Quotes</h3>
                 <p>Clients may post service requests, and service providers may submit quotes. ServiceHub does not guarantee the quality, safety, or legality of services provided. All agreements are between the client and service provider directly.</p>
-                <h3>5. Payments and Fees</h3>
-                <p>ServiceHub charges a 20% service fee on all completed transactions. Payments are processed through our secure payment system. Clients deposit funds into escrow, which are released to service providers upon job completion and client approval.</p>
-                <h3>6. Cancellations and Refunds</h3>
-                <p>Cancellation policies are determined by service providers. Disputes regarding service quality or payments should be reported to ServiceHub for mediation.</p>
+                <h3>5. Free Service and Payments</h3>
+                <p>ServiceHub is currently free for both clients and service providers. We charge no fees or commissions. ServiceHub does not process, hold or release payments: the price, payment method and timing are agreed and settled directly between the client and the service provider.</p>
+                <h3>6. Cancellations and Disputes</h3>
+                <p>Cancellations, refunds and disputes about work quality or payment are between the client and the service provider. You can report misconduct to ServiceHub, and we may suspend accounts that break these Terms.</p>
                 <h3>7. Intellectual Property</h3>
                 <p>All content on the ServiceHub platform, including logos, designs, text, graphics, and software, is the property of ServiceHub Kenya Limited and protected by copyright and other intellectual property laws.</p>
                 <h3>8. Limitation of Liability</h3>
@@ -5776,8 +5753,8 @@ function renderJobs(jobs = []) {
                             <div style="color:var(--dark-gray);font-weight:600;margin-top:8px;">${role === 'service-provider' ? 'Quotes Accepted' : 'Open Jobs'}</div>
                         </div>
                         <div class="stat-card" style="background:var(--white);border-radius:var(--radius-lg);padding:24px;box-shadow:var(--shadow);text-align:center;border-top:4px solid var(--secondary);">
-                            <div style="font-size:2.5rem;font-weight:800;color:var(--secondary);">KES ${Number((role === 'service-provider' ? s.totalEarned : s.totalSpent) || 0).toLocaleString()}</div>
-                            <div style="color:var(--dark-gray);font-weight:600;margin-top:8px;">Total ${role === 'service-provider' ? 'Earned' : 'Spent'}</div>
+                            <div style="font-size:2.5rem;font-weight:800;color:var(--secondary);">${(role === 'service-provider' ? s.assignedInProgress : s.jobsInProgress) || 0}</div>
+                            <div style="color:var(--dark-gray);font-weight:600;margin-top:8px;">Jobs In Progress</div>
                         </div>
                         <div class="stat-card" style="background:var(--white);border-radius:var(--radius-lg);padding:24px;box-shadow:var(--shadow);text-align:center;border-top:4px solid var(--accent);">
                             <div style="font-size:2.5rem;font-weight:800;color:var(--accent);">${s.avgRating || 0} ⭐</div>
@@ -6045,7 +6022,7 @@ function renderJobs(jobs = []) {
 
         // ── Client: Confirm or Dispute Completion ─────────────────────────────
         async function confirmJobCompletion(jobId) {
-            if (!confirm('Confirm this job was completed to your satisfaction? This releases payment to the provider.')) return;
+            if (!confirm('Confirm this job was completed to your satisfaction?')) return;
             try {
                 const res = await fetch(`${API_BASE}/jobs/${jobId}/confirm-completion`, {
                     method: 'PUT',
@@ -6053,7 +6030,7 @@ function renderJobs(jobs = []) {
                 });
                 const data = await res.json();
                 if (data.success) {
-                    showNotification('Job confirmed as completed. Payment released.', 'success');
+                    showNotification('Job confirmed as completed.', 'success');
                     setTimeout(loadMyJobs, 1000);
                 } else {
                     showNotification(data.message || 'Could not confirm completion', 'error');
@@ -6084,7 +6061,7 @@ function renderJobs(jobs = []) {
 
         // ── Provider: Mark Job Complete ───────────────────────────────────────
         async function requestJobCompletion(jobId) {
-            if (!confirm('Mark this job as complete? The client will be asked to confirm before payment is released.')) return;
+            if (!confirm('Mark this job as complete? The client will be asked to confirm.')) return;
             try {
                 const res = await fetch(`${API_BASE}/jobs/${jobId}/request-completion`, {
                     method: 'PUT',
@@ -6158,7 +6135,7 @@ function renderJobs(jobs = []) {
             document.querySelectorAll('.service-filter-link').forEach(link => link.addEventListener('click', (e) => { e.preventDefault(); if(categoryFilter) categoryFilter.value = link.getAttribute('data-category'); showSection('find-services'); applyJobFilters(); }));
             document.querySelectorAll('.service-card').forEach(card => card.addEventListener('click', function() { if(categoryFilter) categoryFilter.value = this.getAttribute('data-category'); showSection('find-services'); applyJobFilters(); }));
             if (userMenu) userMenu.addEventListener('click', (e) => { e.stopPropagation(); userDropdown.classList.toggle('show'); });
-            document.addEventListener('click', () => userDropdown.classList.remove('show'));
+            document.addEventListener('click', () => { if (userDropdown) userDropdown.classList.remove('show'); });
             if (findServicesBtn) findServicesBtn.addEventListener('click', () => showSection('find-services'));
             if (howItWorksBtn) howItWorksBtn.addEventListener('click', () => showSection('how-it-works'));
             if (applyFilters) applyFilters.addEventListener('click', applyJobFilters);
@@ -6175,7 +6152,7 @@ function renderJobs(jobs = []) {
                 if(this.id === 'post-job-action') postJobModal.classList.add('active');
                 else if(this.id === 'my-jobs-action') { currentUser.role === 'service-provider' ? loadMyAssignedJobs() : loadMyJobs(); }
                 else if(this.id === 'messages-action') showSection('chat');
-                else openProfileSettings();
+                else loadAccountPanel();
             }));
             if (jobCountySelect) jobCountySelect.addEventListener('change', function() { updateJobSubcountySelect(this.value); });
             if (countyFilter) countyFilter.addEventListener('change', updateSubcountyFilter);

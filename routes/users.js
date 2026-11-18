@@ -14,12 +14,9 @@ function validationErrors(req, res) {
 router.get("/dashboard/stats", verifyJWT, async (req, res) => {
   try {
     const uid = req.user.uid;
-    const [assignedSnap, payoutSnap] = await Promise.all([
-      firebase.db.collection(firebase.COLLECTIONS.JOBS).where("assignedProviderId", "==", uid).get(),
-      firebase.db.collection(firebase.COLLECTIONS.PAYOUTS).where("providerId", "==", uid).get(),
-    ]);
+    const assignedSnap = await firebase.db.collection(firebase.COLLECTIONS.JOBS).where("assignedProviderId", "==", uid).get();
     const assignedJobsCompleted = assignedSnap.docs.filter((d) => d.data().status === "completed").length;
-    const totalEarned = payoutSnap.docs.reduce((s, d) => s + (d.data().payoutAmount || 0), 0);
+    const assignedInProgress = assignedSnap.docs.filter((d) => ["in-progress", "pending-completion"].includes(d.data().status)).length;
     const [jobsSnap, quotesSnap, paymentsSnap, reviewsSnap] = await Promise.all([
       firebase.db.collection(firebase.COLLECTIONS.JOBS).where("clientId", "==", uid).get(),
       firebase.db.collection(firebase.COLLECTIONS.QUOTES).where("providerId", "==", uid).get(),
@@ -32,7 +29,7 @@ router.get("/dashboard/stats", verifyJWT, async (req, res) => {
     const reviews = reviewsSnap.docs.map((d) => d.data());
     const totalSpent = payments.reduce((s, p) => s + (p.amount || 0), 0);
     const avgRating = reviews.length ? Math.round((reviews.reduce((s, r) => s + r.rating, 0) / reviews.length) * 10) / 10 : 0;
-    return res.json({ success: true, stats: { jobsPosted: jobs.filter((j) => j.status !== "cancelled").length, jobsOpen: jobs.filter((j) => j.status === "open").length, jobsInProgress: jobs.filter((j) => j.status === "in-progress").length, jobsCompleted: jobs.filter((j) => j.status === "completed").length, quotesSubmitted: quotes.length, assignedJobsCompleted, totalEarned, quotesAccepted: quotes.filter((q) => q.status === "accepted").length, totalSpent, reviewCount: reviews.length, avgRating } });
+    return res.json({ success: true, stats: { jobsPosted: jobs.filter((j) => j.status !== "cancelled").length, jobsOpen: jobs.filter((j) => j.status === "open").length, jobsInProgress: jobs.filter((j) => ["awaiting-provider", "in-progress", "pending-completion"].includes(j.status)).length, jobsCompleted: jobs.filter((j) => j.status === "completed").length, quotesSubmitted: quotes.length, assignedJobsCompleted, assignedInProgress, quotesAccepted: quotes.filter((q) => q.status === "accepted").length, totalSpent, reviewCount: reviews.length, avgRating } });
   } catch (error) {
     console.error("Dashboard stats error:", error);
     return res.status(500).json({ success: false, message: "Could not fetch dashboard stats" });

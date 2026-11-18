@@ -1,6 +1,6 @@
 # ServiceHub Kenya
 
-On-demand professional services marketplace for Kenya: clients post jobs, providers quote, work gets done, M-Pesa payments.
+Free marketplace connecting clients and service providers across Kenya: clients post jobs, providers quote, clients choose, providers accept and do the work. ServiceHub charges no fees and does not handle payments; clients pay providers directly.
 
 One Railway service serves both:
 - the website (`public/index.html`), and
@@ -24,6 +24,6 @@ npm start              # http://localhost:5000
 - Login fixed after password reset (checks Firebase Auth and re-syncs the stored hash).
 - Half-created accounts cleaned up automatically; duplicate phone numbers get a clear message.
 - Rate limits suited to Kenyan mobile networks (shared IPs).
-- Added the job completion flow the website already used: assigned jobs, request / confirm / dispute completion, provider payout records.
+- Job flow: quotes under each job, client accepts a quote, provider accepts the offer and sets a start date (job chat opens), completion by either side.
 - All queries work on a brand-new Firebase project without creating composite indexes.
 - `/health` reports exactly which setting is missing.
