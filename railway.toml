@@ -1,0 +1,7 @@
+# ServiceHub Kenya - one Railway service serves the website (public/) and the API (/api)
+[deploy]
+startCommand = "npm start"
+healthcheckPath = "/api"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
