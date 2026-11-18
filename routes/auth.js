@@ -23,6 +23,25 @@ function toE164(phone) {
   return "+" + d;
 }
 
+// Ask Firebase itself to email a password-reset link (works with no email provider configured)
+function firebaseSendReset(email) {
+  const key = process.env.FIREBASE_WEB_API_KEY;
+  if (!key) return Promise.resolve(false);
+  const body = JSON.stringify({ requestType: "PASSWORD_RESET", email });
+  return new Promise((resolve) => {
+    const req = https.request({
+      hostname: "identitytoolkit.googleapis.com",
+      path: `/v1/accounts:sendOobCode?key=${encodeURIComponent(key)}`,
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+      timeout: 10000,
+    }, (res) => { let d = ""; res.on("data", (c) => (d += c)); res.on("end", () => { if (res.statusCode !== 200) console.error("Firebase reset email failed:", d); resolve(res.statusCode === 200); }); });
+    req.on("error", () => resolve(false));
+    req.on("timeout", () => { req.destroy(); resolve(false); });
+    req.write(body); req.end();
+  });
+}
+
 // Check a password against Firebase Auth (used after a password reset, because the
 // reset link changes the Firebase Auth password, not our stored hash).
 function firebasePasswordOk(email, password) {
@@ -255,10 +274,19 @@ router.post("/password-reset", keepRawEmail, body("email").isEmail().normalizeEm
     // Make sure a Firebase Auth user exists (social or older accounts may lack one)
     try { await auth.getUserByEmail(email); }
     catch (e) { const u = snap.docs[0].data(); await auth.createUser({ uid: u.uid, email }).catch(() => {}); }
-    const resetLink = await auth.generatePasswordResetLink(email);
-    await sendPasswordResetEmail({ email, resetLink });
+    // Branded email via Resend when configured; otherwise (or if it fails) Firebase sends its own reset email
+    let sent = false;
+    if (process.env.RESEND_API_KEY) {
+      try {
+        const resetLink = await auth.generatePasswordResetLink(email);
+        await sendPasswordResetEmail({ email, resetLink });
+        sent = true;
+      } catch (e) { console.error("Resend reset email failed, falling back to Firebase:", e.message); }
+    }
+    if (!sent) sent = await firebaseSendReset(email);
+    if (!sent) throw new Error("No reset email could be sent");
 
-    return res.json({ success: true, message: "Password reset link sent to your email." });
+    return res.json({ success: true, message: "Password reset link sent to your email. Check your inbox and spam folder." });
   } catch (error) {
     console.error("Password reset error:", error);
     return res.status(500).json({ success: false, message: "Could not send reset email. Try again later." });

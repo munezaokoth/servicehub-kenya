@@ -11,6 +11,7 @@ const FROM = process.env.EMAIL_FROM_NAME
 
 // ── Core send function via Resend API ─────────────────────────────────────
 async function sendEmail({ to, subject, html }) {
+  if (!RESEND_API_KEY) { console.log(`(email skipped, RESEND_API_KEY not set) ${subject} -> ${to}`); return { skipped: true }; }
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({
       from: FROM,
