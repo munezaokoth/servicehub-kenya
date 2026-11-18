@@ -101,6 +101,69 @@ async function completeJob(doc, job) {
     notify(job.assignedProviderId, "completion_confirmed", { jobId: doc.id, title: job.title });
 }
 
+// ── Provider: accept the job offer → job commences ────────────────────────
+router.put("/:id/provider-accept", verifyJWT, async (req, res) => {
+  try {
+    const doc = await loadJob(req, res); if (!doc) return;
+    const job = doc.data();
+    if (job.assignedProviderId !== req.user.uid) return res.status(403).json({ success: false, message: "This job was not offered to you" });
+    if (job.status !== "awaiting-provider") return res.status(400).json({ success: false, message: `This job is ${job.status}` });
+    const now = new Date().toISOString();
+    const startDate = (req.body && req.body.startDate) || now.slice(0, 10);
+    const batch = firebase.db.batch();
+    batch.update(doc.ref, { status: "in-progress", providerAcceptedAt: now, startedAt: now, plannedStartDate: startDate, updatedAt: now });
+    const qs = await firebase.db.collection(firebase.COLLECTIONS.QUOTES).where("jobId", "==", doc.id).get();
+    qs.docs.forEach((q) => {
+      if (q.id === job.acceptedQuoteId) batch.update(q.ref, { status: "accepted", updatedAt: now });
+      else if (q.data().status === "pending") batch.update(q.ref, { status: "rejected", updatedAt: now });
+    });
+
+    // Commencement: open (or reuse) a job conversation between client and provider with a kickoff message
+    const convs = await firebase.db.collection(firebase.COLLECTIONS.CONVERSATIONS).where("participants", "array-contains", req.user.uid).get();
+    let conv = convs.docs.find((d) => d.data().participants.includes(job.clientId));
+    let convId = conv ? conv.id : uuidv4();
+    const kickoff = `Job started: "${job.title}". ${req.user.name} accepted the job for KES ${Number(job.acceptedAmount || 0).toLocaleString()} and plans to start on ${startDate}. Use this chat to agree on access, materials and timing.`;
+    if (!conv) {
+      batch.set(firebase.db.collection(firebase.COLLECTIONS.CONVERSATIONS).doc(convId), {
+        id: convId, participants: [job.clientId, req.user.uid], participantNames: { [job.clientId]: job.clientName || "Client", [req.user.uid]: req.user.name },
+        jobId: doc.id, lastMessage: kickoff.slice(0, 100), lastMessageAt: now, lastMessageSenderId: req.user.uid, unreadCount: { [job.clientId]: 1, [req.user.uid]: 0 }, createdAt: now,
+      });
+    } else {
+      batch.update(conv.ref, { jobId: doc.id, lastMessage: kickoff.slice(0, 100), lastMessageAt: now, lastMessageSenderId: req.user.uid, [`unreadCount.${job.clientId}`]: admin.firestore.FieldValue.increment(1) });
+    }
+    const msgId = uuidv4();
+    batch.set(firebase.db.collection(firebase.COLLECTIONS.MESSAGES).doc(msgId), { id: msgId, conversationId: convId, senderId: req.user.uid, senderName: req.user.name, text: kickoff, system: true, read: false, createdAt: now });
+    batch.update(doc.ref, { conversationId: convId });
+    await batch.commit();
+
+    notify(job.clientId, "job_started", { jobId: doc.id, title: job.title, message: `${req.user.name} accepted your job "${job.title}" and will start on ${startDate}.` });
+    return res.json({ success: true, message: "Job accepted. The client has been notified and a job chat has been opened.", conversationId: convId });
+  } catch (error) {
+    console.error("Provider accept error:", error);
+    return res.status(500).json({ success: false, message: "Could not accept the job" });
+  }
+});
+
+// ── Provider: decline the job offer → job reopens for other quotes ────────
+router.put("/:id/provider-decline", verifyJWT, async (req, res) => {
+  try {
+    const doc = await loadJob(req, res); if (!doc) return;
+    const job = doc.data();
+    if (job.assignedProviderId !== req.user.uid) return res.status(403).json({ success: false, message: "This job was not offered to you" });
+    if (job.status !== "awaiting-provider") return res.status(400).json({ success: false, message: `This job is ${job.status}` });
+    const now = new Date().toISOString();
+    const batch = firebase.db.batch();
+    batch.update(doc.ref, { status: "open", assignedProviderId: null, assignedProviderName: null, acceptedQuoteId: null, acceptedAmount: null, offeredAt: null, updatedAt: now });
+    if (job.acceptedQuoteId) batch.update(firebase.db.collection(firebase.COLLECTIONS.QUOTES).doc(job.acceptedQuoteId), { status: "declined-by-provider", declineReason: (req.body && req.body.reason) || null, updatedAt: now });
+    await batch.commit();
+    notify(job.clientId, "offer_declined", { jobId: doc.id, title: job.title, message: `${req.user.name} declined your job "${job.title}". You can accept another quote.` });
+    return res.json({ success: true, message: "Job declined. The client can choose another quote." });
+  } catch (error) {
+    console.error("Provider decline error:", error);
+    return res.status(500).json({ success: false, message: "Could not decline the job" });
+  }
+});
+
 // ── Client: confirm a completion the provider requested ───────────────────
 router.put("/:id/confirm-completion", verifyJWT, async (req, res) => {
   try {

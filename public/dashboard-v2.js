@@ -8,12 +8,13 @@ const shKES = (n) => "KES " + Number(n || 0).toLocaleString("en-KE");
 const shDate = (d) => (d ? new Date(d).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" }) : "");
 const SH_STATUS = {
   open: ["Open for quotes", "#1565c0", "#e3f2fd"],
+  "awaiting-provider": ["Waiting for provider to accept", "#6a1b9a", "#f3e5f5"],
   "in-progress": ["In progress", "#e65100", "#fff3e0"],
   "pending-completion": ["Awaiting your confirmation", "#c0392b", "#fdecea"],
   completed: ["Completed", "#2e7d32", "#e8f5e9"],
   cancelled: ["Cancelled", "#616161", "#eeeeee"],
 };
-const SH_QSTATUS = { pending: ["New", "#1565c0", "#e3f2fd"], accepted: ["Accepted", "#2e7d32", "#e8f5e9"], rejected: ["Declined", "#c62828", "#ffebee"], closed: ["Closed", "#616161", "#eeeeee"], withdrawn: ["Withdrawn", "#616161", "#eeeeee"] };
+const SH_QSTATUS = { "awaiting-provider": ["Accepted · awaiting provider", "#6a1b9a", "#f3e5f5"], "declined-by-provider": ["Provider declined", "#c62828", "#ffebee"], pending: ["New", "#1565c0", "#e3f2fd"], accepted: ["Accepted", "#2e7d32", "#e8f5e9"], rejected: ["Declined", "#c62828", "#ffebee"], closed: ["Closed", "#616161", "#eeeeee"], withdrawn: ["Withdrawn", "#616161", "#eeeeee"] };
 const shChip = (map, key) => { const [t, c, b] = map[key] || [key, "#555", "#eee"]; return `<span class="sh-chip" style="color:${c};background:${b}">${shEsc(t)}</span>`; };
 
 let shMyJobs = [];
@@ -188,6 +189,7 @@ function shJobCard(job) {
     } else {
       acts.push(`<button class="sh-btn ok" onclick="markJobCompleted('${job.id}')"><i class="fas fa-check"></i> Mark as Completed</button>`);
     }
+    if (job.conversationId) acts.push(`<button class="sh-btn ghost" onclick="openJobChat('${job.conversationId}','${shEsc(job.assignedProviderName || "Provider").replace(/'/g, "")}')"><i class="fas fa-comments"></i> Job Chat</button>`);
     if (job.status === "open") acts.push(`<button class="sh-btn danger" onclick="cancelJob('${job.id}')"><i class="fas fa-times"></i> Cancel Job</button>`);
   }
   return `<div class="sh-job" id="job-${job.id}">
@@ -197,7 +199,8 @@ function shJobCard(job) {
         <span><i class="fas fa-money-bill-wave"></i> ${shKES(job.budgetMin)} – ${shKES(job.budgetMax)}</span>
         <span><i class="far fa-calendar"></i> ${isDone ? "Completed " + shDate(job.completedAt) : "Posted " + shDate(job.createdAt)}</span></div>
     </div>${shChip(SH_STATUS, job.status)}</div>
-    ${accepted || job.assignedProviderName ? `<div class="sh-assigned"><i class="fas fa-user-check"></i> Assigned to <b>${shEsc(job.assignedProviderName || accepted.providerName)}</b> for <b>${shKES(job.acceptedAmount || (accepted && accepted.amount))}</b></div>` : ""}
+    ${job.status === "awaiting-provider" ? `<div class="sh-assigned" style="background:#f3e5f5;color:#4a148c"><i class="fas fa-hourglass-half"></i> Offer sent to <b>${shEsc(job.assignedProviderName)}</b> for <b>${shKES(job.acceptedAmount)}</b>. Waiting for them to accept the job.</div>`
+      : (accepted || job.assignedProviderName) ? `<div class="sh-assigned"><i class="fas fa-user-check"></i> <b>${shEsc(job.assignedProviderName || accepted.providerName)}</b> is doing this job for <b>${shKES(job.acceptedAmount || (accepted && accepted.amount))}</b>${job.plannedStartDate ? ` · starts ${shDate(job.plannedStartDate)}` : ""}</div>` : ""}
     ${acts.length ? `<div class="sh-actions">${acts.join("")}</div>` : ""}
     ${isDone ? "" : `<div class="sh-quotes"><h4><i class="fas fa-file-invoice-dollar" style="color:var(--primary)"></i> Quotes received (${quotes.length})</h4>
       ${quotes.length ? quotes.map((q) => `<div class="sh-q" role="button" tabindex="0" onclick="openQuote('${job.id}','${q.id}')" onkeydown="if(event.key==='Enter')openQuote('${job.id}','${q.id}')">
@@ -239,10 +242,10 @@ function messageProvider(providerId, jobId) {
 }
 
 async function acceptQuote(quoteId, jobId) {
-  if (!confirm("Accept this quote? The provider will be assigned to the job and other quotes will be declined.")) return;
+  if (!confirm("Accept this quote? The provider will be alerted and asked to accept the job. Other quotes stay on hold until they respond.")) return;
   const data = await shApi(`/quotes/${quoteId}/accept`, { method: "PUT" }).catch(() => ({ success: false }));
   closeQuoteModal();
-  showNotification(data.success ? "Quote accepted. The provider has been assigned." : data.message || "Could not accept the quote", data.success ? "success" : "error");
+  showNotification(data.success ? "Quote accepted. The provider has been alerted and must accept the job to start." : data.message || "Could not accept the quote", data.success ? "success" : "error");
   loadMyJobs({ quiet: true });
 }
 async function rejectQuote(quoteId, jobId) {
@@ -281,7 +284,7 @@ async function cancelJob(jobId) {
 // legacy entry point (old "View Quotes" buttons): open the job in the new view
 function loadJobQuotes(jobId) { loadMyJobs().then(() => { const el = document.getElementById("job-" + jobId); if (el) el.scrollIntoView({ behavior: "smooth" }); }); }
 
-/* ---------- PROVIDER: assigned jobs ---------- */
+/* ---------- PROVIDER: job offers + assigned jobs ---------- */
 async function loadMyAssignedJobs(opts = {}) {
   if (!requireLogin()) return;
   shGoDashboard();
@@ -291,15 +294,42 @@ async function loadMyAssignedJobs(opts = {}) {
   const data = await shApi("/jobs/my/assigned").catch(() => ({ success: false }));
   if (!data.success) { panel.innerHTML = `<div class="sh-loading">Could not load your jobs. <button class="sh-btn ghost" onclick="loadMyAssignedJobs()">Try again</button></div>`; return; }
   const jobs = data.jobs || [];
-  panel.innerHTML = `<div class="sh-panel-head"><h2><i class="fas fa-briefcase" style="color:var(--primary)"></i> My Assigned Jobs</h2>
+  const offers = jobs.filter((j) => j.status === "awaiting-provider");
+  const working = jobs.filter((j) => j.status !== "awaiting-provider");
+  const today = new Date().toISOString().slice(0, 10);
+  const meta = (job) => `<div class="sh-meta"><span><i class="fas fa-map-marker-alt"></i> ${shEsc(job.county)}${job.subcounty ? ", " + shEsc(job.subcounty) : ""}</span>
+        <span><i class="fas fa-money-bill-wave"></i> ${shKES(job.acceptedAmount || job.budgetMin)}</span><span><i class="fas fa-user"></i> ${shEsc(job.clientName || "Client")}</span></div>`;
+  panel.innerHTML = `<div class="sh-panel-head"><h2><i class="fas fa-briefcase" style="color:var(--primary)"></i> My Jobs</h2>
       <button class="sh-btn pri" onclick="showSection('find-services')"><i class="fas fa-search"></i> Find Jobs</button></div>
-    ${jobs.length ? jobs.map((job) => `<div class="sh-job"><div class="sh-job-top"><div><h3>${shEsc(job.title)}</h3>
-        <div class="sh-meta"><span><i class="fas fa-map-marker-alt"></i> ${shEsc(job.county)}${job.subcounty ? ", " + shEsc(job.subcounty) : ""}</span>
-        <span><i class="fas fa-money-bill-wave"></i> ${shKES(job.acceptedAmount || job.budgetMin)}</span><span><i class="fas fa-user"></i> ${shEsc(job.clientName || "Client")}</span></div></div>
-        ${shChip(SH_STATUS, job.status === "pending-completion" ? "pending-completion" : job.status)}</div>
-      <div class="sh-actions">${job.status === "in-progress" ? `<button class="sh-btn ok" onclick="requestJobCompletion('${job.id}')"><i class="fas fa-check"></i> Mark Complete</button>` : `<span class="sh-empty"><i class="fas fa-clock"></i> Waiting for the client to confirm</span>`}
-        <button class="sh-btn ghost" onclick="messageProvider('${job.clientId}','${job.id}')"><i class="fas fa-comments"></i> Message Client</button></div></div>`).join("")
-      : `<div class="sh-job"><div class="sh-loading">No assigned jobs yet. Send quotes on open jobs to get hired.</div></div>`}`;
+    ${offers.length ? `<div class="sh-assigned" style="margin:0 0 14px;background:#f3e5f5;color:#4a148c;font-weight:600"><i class="fas fa-bell"></i> You have ${offers.length} new job offer${offers.length > 1 ? "s" : ""}. Accept to start the job.</div>` : ""}
+    ${offers.map((job) => `<div class="sh-job" style="border:2px solid #8e24aa"><div class="sh-job-top"><div><h3>${shEsc(job.title)}</h3>${meta(job)}</div>${shChip({ "awaiting-provider": ["New job offer", "#6a1b9a", "#f3e5f5"] }, "awaiting-provider")}</div>
+        ${job.description ? `<div class="sh-empty" style="padding:0 20px 10px">${shEsc(job.description).slice(0, 220)}</div>` : ""}
+        <div class="sh-actions" style="align-items:center"><label style="font-size:.85rem;color:var(--dark-gray)">Start date <input type="date" id="start-${job.id}" value="${today}" min="${today}" style="margin-left:6px;padding:7px;border:1px solid var(--light-gray);border-radius:8px"></label>
+          <button class="sh-btn ok" onclick="providerAcceptJob('${job.id}')"><i class="fas fa-handshake"></i> Accept Job</button>
+          <button class="sh-btn danger" onclick="providerDeclineJob('${job.id}')"><i class="fas fa-times"></i> Decline</button></div></div>`).join("")}
+    ${working.map((job) => `<div class="sh-job"><div class="sh-job-top"><div><h3>${shEsc(job.title)}</h3>${meta(job)}
+        ${job.plannedStartDate ? `<div class="sh-meta" style="margin-top:4px"><span><i class="far fa-calendar-check"></i> Start date ${shDate(job.plannedStartDate)}</span></div>` : ""}</div>${shChip(SH_STATUS, job.status)}</div>
+      <div class="sh-actions">${job.status === "in-progress" ? `<button class="sh-btn ok" onclick="requestJobCompletion('${job.id}')"><i class="fas fa-check"></i> Mark Complete</button>` : `<span class="sh-empty"><i class="fas fa-clock"></i> Waiting for the client to confirm completion</span>`}
+        ${job.conversationId ? `<button class="sh-btn ghost" onclick="openJobChat('${job.conversationId}','${shEsc(job.clientName || "Client").replace(/'/g, "")}')"><i class="fas fa-comments"></i> Job Chat</button>` : ""}</div></div>`).join("")}
+    ${!jobs.length ? `<div class="sh-job"><div class="sh-loading">No jobs yet. Send quotes on open jobs. When a client accepts your quote, the offer appears here for you to accept.</div></div>` : ""}`;
+}
+async function providerAcceptJob(jobId) {
+  const d = document.getElementById("start-" + jobId);
+  const startDate = d && d.value ? d.value : undefined;
+  if (!confirm(`Accept this job${startDate ? " and start on " + startDate : ""}? The client will be notified and a job chat will open.`)) return;
+  const data = await shApi(`/jobs/${jobId}/provider-accept`, { method: "PUT", body: JSON.stringify({ startDate }) }).catch(() => ({ success: false }));
+  showNotification(data.success ? "Job accepted! The client has been notified. Agree on the details in the job chat." : data.message || "Could not accept the job", data.success ? "success" : "error");
+  loadMyAssignedJobs({ quiet: true }); loadDashboardStats();
+}
+async function providerDeclineJob(jobId) {
+  if (!confirm("Decline this job offer? The client will be able to choose another provider.")) return;
+  const data = await shApi(`/jobs/${jobId}/provider-decline`, { method: "PUT" }).catch(() => ({ success: false }));
+  showNotification(data.success ? "Job offer declined." : data.message || "Could not decline the job", data.success ? "info" : "error");
+  loadMyAssignedJobs({ quiet: true });
+}
+function openJobChat(convId, otherName) {
+  showSection("chat");
+  if (typeof openConversation === "function") setTimeout(() => openConversation(convId, otherName), 400);
 }
 async function requestJobCompletion(jobId) {
   if (!confirm("Mark this job as complete? The client will be asked to confirm.")) return;
@@ -313,8 +343,22 @@ async function requestJobCompletion(jobId) {
   const hook = () => {
     if (typeof socket !== "undefined" && socket && !socket.__shHooked) {
       socket.__shHooked = true;
-      socket.on("notification", () => { const d = document.getElementById("dashboard"); if (d && d.classList.contains("active")) loadDashboardPanel(); });
+      socket.on("notification", (n) => {
+        if (n && n.message) showNotification(n.message, n.type === "offer_declined" ? "warning" : "success");
+        else if (n && n.type === "new_quote") showNotification("New quote received on one of your jobs.", "success");
+        const d = document.getElementById("dashboard"); if (d && d.classList.contains("active")) loadDashboardPanel();
+      });
     }
   };
   setInterval(hook, 3000);
 })();
+
+/* account menu items (Dashboard, Messages, Email Settings) were not wired to navigation */
+document.addEventListener("click", (e) => {
+  const item = e.target.closest(".dropdown-item[data-section]");
+  if (!item) return;
+  e.preventDefault();
+  showSection(item.getAttribute("data-section"));
+  const dd = document.getElementById("user-dropdown") || item.closest(".dropdown-menu, .user-dropdown");
+  if (dd) dd.classList.remove("show");
+});

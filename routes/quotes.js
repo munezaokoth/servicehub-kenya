@@ -9,7 +9,14 @@ const router = express.Router();
 
 const { db, COLLECTIONS } = require("../config/firebase");
 const { verifyJWT } = require("../middleware/auth");
-const { sendQuoteReceivedEmail } = require("../services/email");
+const { sendQuoteReceivedEmail, sendQuoteAcceptedEmail } = require("../services/email");
+
+// Live + saved notification for a user (never blocks the request)
+function alertUser(uid, type, data) {
+  if (!uid) return;
+  try { const { getIO } = require("../utils/socket"); const io = getIO(); if (io) io.to(`user:${uid}`).emit("notification", { type, ...data }); } catch (e) {}
+  db.collection(COLLECTIONS.NOTIFICATIONS).add({ userId: uid, type, ...data, read: false, createdAt: new Date().toISOString() }).catch(() => {});
+}
 const admin = require("firebase-admin");
 
 function validationErrors(req, res) {
@@ -136,47 +143,41 @@ router.get("/my", verifyJWT, async (req, res) => {
   }
 });
 
-// ── PUT /api/quotes/:id/accept  (client accepts a quote) ──────────────────
+// ── PUT /api/quotes/:id/accept  (client accepts a quote → job is OFFERED to that provider) ──
+// The provider must then accept the job (PUT /api/jobs/:id/provider-accept) before work commences.
 router.put("/:id/accept", verifyJWT, async (req, res) => {
   try {
     const quoteDoc = await db.collection(COLLECTIONS.QUOTES).doc(req.params.id).get();
     if (!quoteDoc.exists) return res.status(404).json({ success: false, message: "Quote not found" });
-
     const quote = quoteDoc.data();
-    if (quote.clientId !== req.user.uid) {
-      return res.status(403).json({ success: false, message: "Not authorised" });
-    }
+    if (quote.clientId !== req.user.uid) return res.status(403).json({ success: false, message: "Not authorised" });
+    if (quote.status !== "pending") return res.status(400).json({ success: false, message: `This quote is ${quote.status}` });
 
-    const batch = db.batch();
-
-    // Accept this quote
-    batch.update(quoteDoc.ref, { status: "accepted", updatedAt: new Date().toISOString() });
-
-    // Reject all other quotes for the same job
-    const otherSnap = await db.collection(COLLECTIONS.QUOTES)
-      .where("jobId", "==", quote.jobId)
-      .where("status", "==", "pending")
-      .get();
-    otherSnap.docs.forEach((d) => {
-      if (d.id !== req.params.id) {
-        batch.update(d.ref, { status: "rejected", updatedAt: new Date().toISOString() });
-      }
-    });
-
-    // Update job status to in-progress
     const jobRef = db.collection(COLLECTIONS.JOBS).doc(quote.jobId);
+    const jobDoc = await jobRef.get();
+    if (!jobDoc.exists) return res.status(404).json({ success: false, message: "Job not found" });
+    const job = jobDoc.data();
+    if (job.status !== "open") return res.status(409).json({ success: false, message: "This job already has a provider offer in progress" });
+
+    const now = new Date().toISOString();
+    const batch = db.batch();
+    batch.update(quoteDoc.ref, { status: "awaiting-provider", offeredAt: now, updatedAt: now });
     batch.update(jobRef, {
-      status: "in-progress",
+      status: "awaiting-provider",
       assignedProviderId: quote.providerId,
       assignedProviderName: quote.providerName,
       acceptedQuoteId: quote.id,
       acceptedAmount: quote.amount,
-      updatedAt: new Date().toISOString(),
+      offeredAt: now,
+      updatedAt: now,
     });
-
     await batch.commit();
 
-    return res.json({ success: true, message: "Quote accepted. Job is now in progress." });
+    // Alert the provider: live notification, saved notification, and email
+    alertUser(quote.providerId, "job_offer", { jobId: quote.jobId, title: job.title, amount: quote.amount, message: `Your quote for "${job.title}" was accepted. Accept the job to start.` });
+    sendQuoteAcceptedEmail({ providerEmail: quote.providerEmail, providerName: quote.providerName, job, amount: quote.amount }).catch(console.error);
+
+    return res.json({ success: true, message: "Quote accepted. The provider has been alerted and must accept the job to start." });
   } catch (error) {
     console.error("Accept quote error:", error);
     return res.status(500).json({ success: false, message: "Could not accept quote" });
