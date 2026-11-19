@@ -672,6 +672,19 @@
       if (post) { const m = $("post-job-modal"); if (me() && m) { showSection("dashboard"); m.classList.add("active"); } else requireSignIn("Sign in or create a free account, then post your job."); }
     }, 1500);
   }
+  // Home page "Our Services" cards (and footer service links): open Find Services with that service already selected.
+  // Runs before the page's own click handler, which still filters the job requests as before.
+  document.addEventListener("click", (e) => {
+    const el = e.target.closest(".service-card[data-category], .service-filter-link[data-category]");
+    if (!el || !S.picker) return;
+    const slug = el.getAttribute("data-category");
+    const c = categoryList().find((x) => x.v === slug);
+    if (!c) return;
+    S.picker.set({ v: c.v, t: c.t });
+    if (S.mode === "list") S.mode = "near";
+    setMode(S.mode, true);
+  }, true);
+
   function start() { install(); deepLinks(); }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
 })();
