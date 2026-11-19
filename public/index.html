@@ -3514,6 +3514,44 @@ z-index: 1;
                 </div>
             </div>
         </div>
+        <!-- Get the Android app (website only; hidden inside the app) -->
+        <div class="section web-only sh-app-download" id="get-app">
+            <div class="container">
+                <div class="sh-app-card">
+                    <div class="sh-app-text">
+                        <h2>Get the ServiceHub Kenya app</h2>
+                        <p>Post jobs, chat and call service providers from your phone. Your phone rings for ServiceHub calls, even when the app is closed.</p>
+                        <a href="/download/android" class="sh-app-btn" rel="noopener">
+                            <i class="fab fa-android"></i>
+                            <span><small>Download for</small><b>Android (APK)</b></span>
+                        </a>
+                        <p class="sh-app-note">Free. On your phone, open the download and allow installing from your browser if Android asks.</p>
+                    </div>
+                    <div class="sh-app-qr">
+                        <img src="/icons/app-qr.svg" alt="QR code to download the ServiceHub Kenya Android app" width="190" height="190">
+                        <span>Scan with your phone camera to download</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <style>
+            .sh-app-download{padding-top:10px}
+            .sh-app-card{display:flex;align-items:center;justify-content:space-between;gap:32px;flex-wrap:wrap;background:linear-gradient(135deg,#0b2a5b,#1f6feb);color:#fff;border-radius:20px;padding:clamp(22px,4vw,44px);box-shadow:0 14px 40px rgba(11,42,91,.25)}
+            .sh-app-text{flex:1 1 320px;min-width:0}
+            .sh-app-text h2{color:#fff;font-size:clamp(1.4rem,3.4vw,2rem);margin:0 0 10px}
+            .sh-app-text p{color:rgba(255,255,255,.9);margin:0 0 20px;line-height:1.55;max-width:560px}
+            .sh-app-btn{display:inline-flex;align-items:center;gap:12px;background:#000;color:#fff;border-radius:14px;padding:12px 20px;text-decoration:none;border:1px solid rgba(255,255,255,.3)}
+            .sh-app-btn:hover{transform:translateY(-2px);color:#fff}
+            .sh-app-btn i{font-size:2rem;color:#3ddc84}
+            .sh-app-btn span{display:flex;flex-direction:column;line-height:1.15}
+            .sh-app-btn small{font-size:.75rem;opacity:.8}
+            .sh-app-btn b{font-size:1.1rem}
+            .sh-app-note{font-size:.82rem;opacity:.8;margin:14px 0 0!important}
+            .sh-app-qr{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:10px;margin:0 auto}
+            .sh-app-qr img{background:#fff;border-radius:14px;padding:10px;width:190px;height:190px}
+            .sh-app-qr span{font-size:.85rem;opacity:.9;text-align:center;max-width:200px}
+            @media (max-width:600px){.sh-app-card{text-align:center;justify-content:center}.sh-app-text p{margin-left:auto;margin-right:auto}}
+        </style>
     </section>
 
     <!-- About Us Section (Fully populated from indexv2.html) -->
