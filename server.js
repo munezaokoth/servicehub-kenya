@@ -20,6 +20,7 @@ const contactRoutes  = require("./routes/contact");
 const userRoutes     = require("./routes/users");
 const callRoutes     = require("./routes/calls");
 const adminRoutes    = require("./routes/admin");
+const listingRoutes  = require("./routes/listings");
 const { turnProvider } = require("./utils/ice");
 
 const app = express();
@@ -76,6 +77,7 @@ app.use("/api/contact",  contactLimiter, contactRoutes);
 app.use("/api/users",    userRoutes);
 app.use("/api/calls",    callRoutes);
 app.use("/api/admin",    adminRoutes);
+app.use("/api/listings", listingRoutes);
 app.get("/api", (req, res) => res.json({ name: "ServiceHub Kenya API", status: "running", version: "2.0.0" }));
 app.use("/api", (req, res) => res.status(404).json({ success: false, message: `Route ${req.method} ${req.originalUrl} not found` }));
 
