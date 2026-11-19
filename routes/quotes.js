@@ -6,6 +6,7 @@ const express = require("express");
 const { body, validationResult } = require("express-validator");
 const { v4: uuidv4 } = require("uuid");
 const router = express.Router();
+const { isProvider } = require("../utils/roles");
 
 const { db, COLLECTIONS } = require("../config/firebase");
 const { verifyJWT } = require("../middleware/auth");
@@ -39,8 +40,10 @@ router.post(
     const err = validationErrors(req, res);
     if (err) return;
 
-    if (req.user.role !== "service-provider") {
-      return res.status(403).json({ success: false, message: "Only service providers can submit quotes" });
+    // One account can be both client and provider: check what this account can do, not the login mode.
+    const meDoc = await db.collection(COLLECTIONS.USERS).doc(req.user.uid).get().catch(() => null);
+    if (!meDoc || !meDoc.exists || !isProvider(meDoc.data())) {
+      return res.status(403).json({ success: false, code: "NOT_PROVIDER", message: "Set up your service provider profile to send quotes" });
     }
 
     const { jobId, amount, message, estimatedDays } = req.body;
@@ -52,6 +55,9 @@ router.post(
       const job = jobDoc.data();
       if (job.status !== "open") {
         return res.status(409).json({ success: false, message: "This job is no longer accepting quotes" });
+      }
+      if (job.clientId === req.user.uid) {
+        return res.status(403).json({ success: false, code: "OWN_JOB", message: "This is your own job. You can't send a quote on it." });
       }
 
       // Prevent duplicate quotes from same provider

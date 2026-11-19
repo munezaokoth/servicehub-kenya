@@ -386,9 +386,13 @@ function loadAccountPanel(opts = {}) {
       <div><h3 style="margin:0">${shEsc(u.name || "")}</h3>
         <div class="sh-meta"><span><i class="fas fa-envelope"></i> ${shEsc(u.email || "")}</span>${u.phone ? `<span><i class="fas fa-phone"></i> ${shEsc(u.phone)}</span>` : ""}
         ${u.county ? `<span><i class="fas fa-map-marker-alt"></i> ${shEsc(u.county)}</span>` : ""}</div>
-        <div style="margin-top:6px">${shChip({ client: ["Client", "#1565c0", "#e3f2fd"], "service-provider": ["Service Provider", "#2e7d32", "#e8f5e9"] }, u.role)}</div></div></div></div>
+        <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${shRoles().map((r) => shChip({ client: ["Client", "#1565c0", "#e3f2fd"], "service-provider": ["Service Provider", "#2e7d32", "#e8f5e9"] }, r)).join("")}</div></div></div></div>
     <div style="display:grid;gap:10px">
-      ${tile("fa-user-edit", "Edit Profile", "Name, phone, county, bio" + (u.role === "service-provider" ? " and skills" : ""), "openProfileSettings()")}
+      ${u.isAdmin ? tile("fa-user-shield", "Admin Portal", "Manage users, jobs and messages", "window.location.href='/admin'") : ""}
+      ${shIsProvider()
+        ? tile("fa-exchange-alt", u.role === "service-provider" ? "Switch to Client mode" : "Switch to Service Provider mode", u.role === "service-provider" ? "Post jobs and hire providers" : "Find jobs and send quotes", u.role === "service-provider" ? "switchRole('client')" : "switchRole('service-provider')")
+        : tile("fa-tools", "Become a Service Provider", "Offer your services and get hired, using this same account", "openBecomeProvider()")}
+      ${tile("fa-user-edit", "Edit Profile", "Name, phone, county, bio" + (shIsProvider() ? " and skills" : ""), "openProfileSettings()")}
       ${tile("fa-comments", "Messages", "Chats with clients and providers", "showSection('chat')")}
       ${tile("fa-envelope-open-text", "Email Settings", "Choose which emails you receive", "showSection('email-settings')")}
       ${tile("fa-key", "Change Password", "We'll email you a secure reset link", "accountPasswordReset()")}
@@ -777,3 +781,116 @@ setInterval(() => {
     socket.on("notification", (n) => { if (n && n.jobId && n.jobId === shTrackJobId) openTrack(n.jobId); });
   }
 }, 3000);
+
+
+/* ---------- one account, two roles: hire (client) and work (service provider) ---------- */
+(function () {
+  const css = document.createElement("style");
+  css.textContent = `
+  #sh-role-switch{margin-top:16px;display:flex;justify-content:center}
+  .sh-role-toggle{display:inline-flex;background:var(--light,#f1f5f9);border:1px solid var(--light-gray,#e2e8f0);border-radius:999px;padding:4px;gap:4px;max-width:100%}
+  .sh-role-toggle button{border:0;background:transparent;border-radius:999px;padding:9px 16px;font-weight:700;cursor:pointer;color:var(--dark-gray,#475569);display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+  .sh-role-toggle button small{font-weight:500;opacity:.75}
+  .sh-role-toggle button.on{background:var(--primary);color:#fff;box-shadow:0 4px 12px rgba(46,134,222,.3)}
+  @media (max-width:420px){.sh-role-toggle button{padding:8px 11px}.sh-role-toggle button small{display:none}}`;
+  document.head.appendChild(css);
+})();
+
+function shRoles() {
+  const u = currentUser || {};
+  const r = Array.isArray(u.roles) && u.roles.length ? u.roles.slice() : [u.role || "client"];
+  if (!r.includes("client")) r.unshift("client");
+  return r;
+}
+function shIsProvider() { return shRoles().includes("service-provider"); }
+
+function shApplySession(data, msg) {
+  setToken(data.token);
+  currentUser = { ...data.user, loggedIn: true };
+  window.currentUser = currentUser;
+  updateAuthUI();
+  try { loadDashboardStats(); } catch (e) {}
+  try { loadDashboardPanel(); } catch (e) {}
+  if (msg) showNotification(msg, "success");
+}
+
+async function switchRole(role) {
+  if (!requireLogin()) return;
+  if (currentUser.role === role) return;
+  if (role === "service-provider" && !shIsProvider()) { openBecomeProvider(); return; }
+  const d = await shApi("/auth/switch-role", { method: "POST", body: JSON.stringify({ role }) }).catch(() => ({ success: false }));
+  if (!d.success) {
+    if (d.code === "ROLE_NOT_ENABLED") { openBecomeProvider(); return; }
+    showNotification(d.message || "Could not switch. Please try again.", "error");
+    return;
+  }
+  shApplySession(d, role === "service-provider" ? "Service Provider mode: find jobs and send quotes." : "Client mode: post jobs and hire service providers.");
+}
+
+function renderRoleSwitch() {
+  const head = document.querySelector("#dashboard .dashboard-header");
+  if (!head) return;
+  let el = document.getElementById("sh-role-switch");
+  if (!currentUser || !currentUser.loggedIn) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement("div"); el.id = "sh-role-switch"; head.appendChild(el); }
+  const prov = currentUser.role === "service-provider";
+  el.innerHTML = shIsProvider()
+    ? `<div class="sh-role-toggle" role="group" aria-label="Choose what you are doing now">
+         <button type="button" class="${!prov ? "on" : ""}" aria-pressed="${!prov}" onclick="switchRole('client')"><i class="fas fa-briefcase"></i> Hiring <small>Client</small></button>
+         <button type="button" class="${prov ? "on" : ""}" aria-pressed="${prov}" onclick="switchRole('service-provider')"><i class="fas fa-tools"></i> Working <small>Service Provider</small></button>
+       </div>`
+    : `<button type="button" class="sh-btn pri" onclick="openBecomeProvider()"><i class="fas fa-tools"></i> Also offer your services: become a Service Provider</button>`;
+}
+
+function openBecomeProvider() {
+  if (!requireLogin()) return;
+  let m = document.getElementById("sh-become-provider");
+  if (!m) {
+    m = document.createElement("div");
+    m.className = "modal";
+    m.id = "sh-become-provider";
+    m.innerHTML = `<div class="modal-content" style="max-width:520px">
+      <div class="modal-header"><h2 class="modal-title"><i class="fas fa-tools" style="color:var(--primary);margin-right:10px"></i>Offer your services</h2>
+        <button class="modal-close" type="button" aria-label="Close" onclick="document.getElementById('sh-become-provider').classList.remove('active')">&times;</button></div>
+      <div class="modal-body">
+        <p style="color:var(--dark-gray);margin-bottom:16px">Use this same account to get hired. Your jobs, chats and details stay as they are, and you can switch between <b>Hiring</b> and <b>Working</b> any time.</p>
+        <div class="form-group"><label class="form-label" for="sh-bp-skills">Services you offer *</label>
+          <input id="sh-bp-skills" class="form-control" placeholder="e.g. Plumbing, Electrical, Tiling" maxlength="300">
+          <small style="color:var(--medium-gray)">Separate with commas.</small></div>
+        <div class="form-group"><label class="form-label" for="sh-bp-bio">About you (optional)</label>
+          <textarea id="sh-bp-bio" class="form-control" rows="3" maxlength="500" placeholder="Experience, areas you cover, working hours"></textarea></div>
+        <button type="button" class="btn btn-primary btn-block" id="sh-bp-go"><i class="fas fa-check"></i> Start offering services</button>
+      </div></div>`;
+    document.body.appendChild(m);
+    m.addEventListener("click", (e) => { if (e.target === m) m.classList.remove("active"); });
+    m.querySelector("#sh-bp-go").onclick = becomeProvider;
+  }
+  const skills = (currentUser && currentUser.skills) || [];
+  m.querySelector("#sh-bp-skills").value = Array.isArray(skills) ? skills.join(", ") : String(skills || "");
+  m.querySelector("#sh-bp-bio").value = (currentUser && currentUser.bio) || "";
+  m.classList.add("active");
+  setTimeout(() => m.querySelector("#sh-bp-skills").focus(), 50);
+}
+
+async function becomeProvider() {
+  const m = document.getElementById("sh-become-provider");
+  const skills = m.querySelector("#sh-bp-skills").value.split(",").map((x) => x.trim()).filter(Boolean);
+  const bio = m.querySelector("#sh-bp-bio").value.trim();
+  if (!skills.length) { showNotification("Add at least one service you offer (for example: Plumbing)", "error"); return; }
+  const btn = m.querySelector("#sh-bp-go"); btn.disabled = true;
+  const d = await shApi("/auth/become-provider", { method: "POST", body: JSON.stringify({ skills, bio }) }).catch(() => ({ success: false }));
+  btn.disabled = false;
+  if (!d.success) { showNotification(d.message || "Could not update your account. Please try again.", "error"); return; }
+  m.classList.remove("active");
+  shApplySession(d, "You're now a Service Provider too. Find jobs and send quotes; switch to Hiring any time.");
+}
+
+// Show the Hiring / Working switch whenever sign-in state changes
+(function () {
+  const orig = window.updateAuthUI || (typeof updateAuthUI === "function" ? updateAuthUI : null);
+  if (!orig) return;
+  const wrapped = function () { orig.apply(this, arguments); try { renderRoleSwitch(); } catch (e) {} };
+  window.updateAuthUI = wrapped;
+  try { updateAuthUI = wrapped; } catch (e) {}
+  if (currentUser && currentUser.loggedIn) renderRoleSwitch();
+})();

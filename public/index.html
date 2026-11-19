@@ -2951,6 +2951,7 @@ z-index: 1;
                                 <option value="client">Client (Looking for services)</option>
                                 <option value="service-provider">Service Provider (Offering services)</option>
                             </select>
+                            <small style="display:block;margin-top:6px;color:var(--medium-gray)">You can do both with one account: hire providers and offer your own services. Switch any time from your dashboard.</small>
                         </div>
                         <div class="form-check">
                             <input type="checkbox" id="terms-agreement" class="form-check-input" required>
@@ -4421,6 +4422,7 @@ z-index: 1;
             </div>
             <div class="footer-bottom">
                 <p>&copy; 2026 ServiceHub Kenya Limited. All rights reserved. | <a href="#" onclick="showLegalModal('privacy'); return false;">Privacy Policy</a> | <a href="#" onclick="showLegalModal('terms'); return false;">Terms of Service</a></p>
+                <p class="sh-product-of" style="margin-top:8px;font-size:.85rem;opacity:.85">A product of <a href="https://jatelo-techs.com" target="_blank" rel="noopener" style="font-weight:700">Jatelo Technologies</a></p>
             </div>
         </div>
     </footer>
@@ -5173,8 +5175,10 @@ function renderJobs(jobs = []) {
             if (!amount || parseFloat(amount) < 1) { showNotification('Please enter a valid quote amount', 'error'); return; }
             if (!jobId) { showNotification('No job selected. Please go back and select a job.', 'error'); return; }
             if (!getToken()) { showNotification('Please sign in to submit a quote', 'error'); showSection('auth'); return; }
-            if (currentUser.role !== 'service-provider') {
-                showNotification('Only service providers can submit quotes', 'error'); return;
+            if (!(typeof shIsProvider === 'function' ? shIsProvider() : currentUser.role === 'service-provider')) {
+                showNotification('Set up your service provider profile to send quotes', 'info');
+                if (typeof openBecomeProvider === 'function') openBecomeProvider();
+                return;
             }
             showNotification('Submitting your quote...', 'info');
             try {
@@ -5499,7 +5503,7 @@ function renderJobs(jobs = []) {
             document.getElementById('profile-subcounty').value = currentUser.subcounty || '';
             // Show skills field for providers
             const skillsGroup = document.getElementById('skills-group');
-            if (currentUser.role === 'service-provider') {
+            if (typeof shIsProvider === 'function' ? shIsProvider() : currentUser.role === 'service-provider') {
                 skillsGroup.style.display = 'block';
                 document.getElementById('profile-skills').value = (currentUser.skills || []).join(', ');
             } else {
@@ -5509,7 +5513,7 @@ function renderJobs(jobs = []) {
             const initials = (currentUser.name || 'U').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
             document.getElementById('profile-avatar-display').textContent = initials;
             document.getElementById('profile-name-display').textContent = currentUser.name || '';
-            document.getElementById('profile-role-display').textContent = currentUser.role === 'service-provider' ? 'Service Provider' : 'Client';
+            document.getElementById('profile-role-display').textContent = (typeof shIsProvider === 'function' && shIsProvider()) ? 'Client & Service Provider' : 'Client';
             modal.classList.add('active');
         }
 

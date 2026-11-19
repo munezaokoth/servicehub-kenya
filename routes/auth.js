@@ -12,6 +12,8 @@ const router = express.Router();
 const { db, auth, COLLECTIONS } = require("../config/firebase");
 const { generateToken, verifyJWT } = require("../middleware/auth");
 const { sendWelcomeEmail, sendPasswordResetEmail } = require("../services/email");
+const { rolesOf, activeRoleOf, PROVIDER } = require("../utils/roles");
+const { isAdminUser } = require("../utils/admin");
 const https = require("https");
 
 // Kenyan phone → E.164 (+2547XXXXXXXX / +2541XXXXXXXX)
@@ -144,6 +146,7 @@ router.post("/register", registerValidation, async (req, res) => {
       email,
       phone: e164,
       role,
+      roles: role === "service-provider" ? ["client", "service-provider"] : ["client"],
       county: county || null,
       subcounty: subcounty || null,
       passwordHash,
@@ -165,7 +168,7 @@ router.post("/register", registerValidation, async (req, res) => {
       throw e;
     }
 
-    const token = generateToken({ uid, email, name, role });
+    const token = generateToken({ uid, email, name, role, roles: role === "service-provider" ? ["client", "service-provider"] : ["client"] });
 
     // Send welcome email (non-blocking)
     sendWelcomeEmail({ name, email, role }).catch(console.error);
@@ -176,7 +179,7 @@ router.post("/register", registerValidation, async (req, res) => {
       console.log(`Verification link for ${email}: ${link}`);
     }).catch(console.error);
 
-    const safeUser = { uid, name, email, phone, role, county, subcounty, emailVerified: false };
+    const safeUser = { uid, name, email, phone, role, roles: role === "service-provider" ? ["client", "service-provider"] : ["client"], county, subcounty, emailVerified: false };
     return res.status(201).json({ success: true, message: "Account created successfully", token, user: safeUser });
   } catch (error) {
     console.error("Register error:", error);
@@ -233,7 +236,8 @@ router.post("/login", keepRawEmail, loginValidation, async (req, res) => {
       uid: userData.uid,
       email: userData.email,
       name: userData.name,
-      role: userData.role,
+      role: activeRoleOf(userData),
+      roles: rolesOf(userData),
     });
 
     const safeUser = {
@@ -241,7 +245,9 @@ router.post("/login", keepRawEmail, loginValidation, async (req, res) => {
       name: userData.name,
       email: userData.email,
       phone: userData.phone,
-      role: userData.role,
+      role: activeRoleOf(userData),
+      roles: rolesOf(userData),
+      isAdmin: isAdminUser(userData),
       county: userData.county,
       subcounty: userData.subcounty,
       emailVerified: userData.emailVerified,
@@ -301,6 +307,9 @@ router.get("/me", verifyJWT, async (req, res) => {
       return res.status(404).json({ success: false, message: "User not found" });
     }
     const { passwordHash, ...safeUser } = doc.data();
+    safeUser.roles = rolesOf(safeUser);
+    safeUser.role = activeRoleOf(safeUser);
+    safeUser.isAdmin = isAdminUser(safeUser);
     return res.json({ success: true, user: safeUser });
   } catch (error) {
     console.error("Get me error:", error);
@@ -325,6 +334,60 @@ router.put("/profile", verifyJWT, async (req, res) => {
   } catch (error) {
     console.error("Update profile error:", error);
     return res.status(500).json({ success: false, message: "Could not update profile" });
+  }
+});
+
+// ── One account, two roles ────────────────────────────────────────────────
+function sessionFor(u) {
+  const roles = rolesOf(u);
+  const role = activeRoleOf(u);
+  const token = generateToken({ uid: u.uid, email: u.email, name: u.name, role, roles });
+  const { passwordHash, ...rest } = u;
+  return { token, user: { ...rest, role, roles, isAdmin: isAdminUser(u) } };
+}
+
+// POST /api/auth/become-provider  { skills: ["Plumbing", ...] | "Plumbing, Tiling", bio? }
+// A client also starts offering services. Switches them to provider mode.
+router.post("/become-provider", verifyJWT, async (req, res) => {
+  try {
+    const ref = db.collection(COLLECTIONS.USERS).doc(req.user.uid);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ success: false, message: "User not found" });
+    const u = doc.data();
+    let skills = req.body && req.body.skills;
+    if (typeof skills === "string") skills = skills.split(",");
+    skills = Array.isArray(skills) ? skills.map((x) => String(x).trim()).filter(Boolean).slice(0, 20) : [];
+    if (!skills.length && !(Array.isArray(u.skills) && u.skills.length)) {
+      return res.status(422).json({ success: false, message: "Add at least one service you offer (for example: Plumbing)" });
+    }
+    const roles = Array.from(new Set([...rolesOf(u), PROVIDER]));
+    const updates = { roles, role: PROVIDER, updatedAt: new Date().toISOString(), providerSince: u.providerSince || new Date().toISOString() };
+    if (skills.length) updates.skills = skills;
+    if (req.body && typeof req.body.bio === "string" && req.body.bio.trim()) updates.bio = req.body.bio.trim().slice(0, 500);
+    await ref.update(updates);
+    return res.json({ success: true, message: "You can now offer services on ServiceHub", ...sessionFor({ ...u, ...updates }) });
+  } catch (error) {
+    console.error("Become provider error:", error);
+    return res.status(500).json({ success: false, message: "Could not update your account. Please try again." });
+  }
+});
+
+// POST /api/auth/switch-role  { role: "client" | "service-provider" }
+router.post("/switch-role", verifyJWT, async (req, res) => {
+  const role = req.body && req.body.role;
+  try {
+    const ref = db.collection(COLLECTIONS.USERS).doc(req.user.uid);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ success: false, message: "User not found" });
+    const u = doc.data();
+    if (!rolesOf(u).includes(role)) {
+      return res.status(403).json({ success: false, code: "ROLE_NOT_ENABLED", message: role === PROVIDER ? "Set up your service provider profile first" : "That role is not available on your account" });
+    }
+    await ref.update({ role, roles: rolesOf(u), updatedAt: new Date().toISOString() });
+    return res.json({ success: true, ...sessionFor({ ...u, role, roles: rolesOf(u) }) });
+  } catch (error) {
+    console.error("Switch role error:", error);
+    return res.status(500).json({ success: false, message: "Could not switch. Please try again." });
   }
 });
 
@@ -373,6 +436,7 @@ router.post("/social-login", async (req, res) => {
         email,
         phone: null,
         role: assignedRole,
+        roles: assignedRole === "service-provider" ? ["client", "service-provider"] : ["client"],
         county: null,
         subcounty: null,
         passwordHash: null, // social users have no password
@@ -400,7 +464,8 @@ router.post("/social-login", async (req, res) => {
       uid: userData.uid,
       email: userData.email,
       name: userData.name,
-      role: userData.role,
+      role: activeRoleOf(userData),
+      roles: rolesOf(userData),
     });
 
     const safeUser = {
@@ -408,7 +473,9 @@ router.post("/social-login", async (req, res) => {
       name: userData.name,
       email: userData.email,
       phone: userData.phone,
-      role: userData.role,
+      role: activeRoleOf(userData),
+      roles: rolesOf(userData),
+      isAdmin: isAdminUser(userData),
       county: userData.county,
       subcounty: userData.subcounty,
       emailVerified: userData.emailVerified,

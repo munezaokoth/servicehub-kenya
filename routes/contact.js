@@ -23,6 +23,16 @@ router.post(
 
     const { name, email, subject, message } = req.body;
 
+    // Keep a copy for the admin portal (best effort; the email still goes out if this fails)
+    let saved = false;
+    try {
+      const firebase = require("../config/firebase");
+      const { v4: uuidv4 } = require("uuid");
+      const id = uuidv4();
+      await firebase.db.collection("contact_messages").doc(id).set({ id, name, email, subject, message, handled: false, createdAt: new Date().toISOString() });
+      saved = true;
+    } catch (e) { console.error("Save contact message error:", e.message); }
+
     try {
       await sendContactEmail({ name, email, subject, message });
       return res.json({
@@ -31,6 +41,7 @@ router.post(
       });
     } catch (error) {
       console.error("Contact email error:", error);
+      if (saved) return res.json({ success: true, message: "Your message has been received! We will respond within 24 hours." });
       return res.status(500).json({
         success: false,
         message: "Could not send your message. Please try again or use WhatsApp.",

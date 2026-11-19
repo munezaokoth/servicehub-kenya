@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>ServiceHub Kenya · Admin</title>
+<link rel="icon" href="/icons/icon-96.png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+:root{--navy:#0b2a5b;--blue:#2e86de;--green:#16a34a;--red:#dc2626;--amber:#d97706;--bg:#f4f6fb;--card:#fff;--line:#e5e9f2;--text:#1f2937;--muted:#6b7280;--r:14px}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Inter,sans-serif;overflow-x:hidden}
+a{color:var(--blue)}button{font:inherit}
+.hidden{display:none!important}
+/* login */
+.login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(135deg,var(--navy),#1f6feb)}
+.login-card{background:#fff;border-radius:18px;padding:28px;width:min(420px,100%);box-shadow:0 20px 50px rgba(0,0,0,.25)}
+.login-card h1{margin:10px 0 4px;font-size:1.4rem}.login-card p{color:var(--muted);margin:0 0 18px;font-size:.92rem}
+.login-card img{width:56px;height:56px;border-radius:12px}
+label{display:block;font-weight:600;font-size:.85rem;margin:12px 0 6px}
+input,select,textarea{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;background:#fff}
+input:focus,select:focus{outline:none;border-color:var(--blue)}
+.btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px;font-size:.88rem;white-space:nowrap}
+.btn.pri{background:var(--blue);color:#fff}.btn.ok{background:var(--green);color:#fff}.btn.danger{background:var(--red);color:#fff}.btn.ghost{background:#eef2f8;color:var(--text)}
+.btn.block{width:100%;margin-top:16px;padding:12px}.btn:disabled{opacity:.6;cursor:default}
+.err{color:var(--red);font-size:.88rem;margin-top:10px;min-height:1.2em}
+/* shell */
+header.top{background:var(--navy);color:#fff;display:flex;align-items:center;gap:12px;padding:10px clamp(12px,3vw,24px)}
+header.top img{width:36px;height:36px;border-radius:9px;background:#fff}
+header.top b{font-size:1.05rem}header.top small{opacity:.75;display:block;font-size:.75rem}
+header.top .sp{flex:1}
+header.top .who{font-size:.82rem;opacity:.9;text-align:right;line-height:1.25}
+header.top .btn{background:rgba(255,255,255,.14);color:#fff}
+nav.tabs{display:flex;gap:6px;padding:10px clamp(12px,3vw,24px);background:#fff;border-bottom:1px solid var(--line);overflow-x:auto}
+.stick{position:sticky;top:0;z-index:10}
+nav.tabs button{border:0;background:transparent;padding:9px 14px;border-radius:999px;font-weight:700;color:var(--muted);cursor:pointer;white-space:nowrap}
+nav.tabs button.on{background:var(--blue);color:#fff}
+nav.tabs .badge{background:var(--red);color:#fff;border-radius:999px;padding:1px 7px;font-size:.72rem;margin-left:6px}
+main{padding:clamp(12px,3vw,24px);max-width:1280px;margin:0 auto}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.stat b{display:block;font-size:1.8rem;line-height:1.1}.stat span{color:var(--muted);font-size:.85rem;font-weight:600}
+.stat small{display:block;color:var(--green);font-weight:700;margin-top:4px}
+h2{font-size:1.1rem;margin:22px 0 10px}
+.two{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr))}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}.row:last-child{border-bottom:0}
+.row .t{min-width:0}.row .t b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.row .t small{color:var(--muted)}
+.bar{height:8px;border-radius:99px;background:#eef2f8;overflow:hidden;margin-top:4px}.bar i{display:block;height:100%;background:var(--blue)}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}.toolbar input{flex:1 1 220px}.toolbar select{flex:0 0 auto;width:auto}
+.list{display:grid;gap:10px}
+.item{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;gap:12px;align-items:flex-start;cursor:pointer}
+.item:hover{border-color:var(--blue)}
+.av{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#34d399,var(--blue));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;flex:0 0 42px}
+.item .t{flex:1;min-width:0}.item .t b{display:block;overflow-wrap:anywhere}.item .meta{color:var(--muted);font-size:.83rem;display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:4px}.item .meta span{min-width:0;overflow-wrap:anywhere}
+.chip{display:inline-block;border-radius:999px;padding:2px 9px;font-size:.72rem;font-weight:700;background:#eef2f8;color:#334155;margin:2px 4px 0 0}
+.chip.g{background:#dcfce7;color:#166534}.chip.b{background:#dbeafe;color:#1e40af}.chip.r{background:#fee2e2;color:#991b1b}.chip.a{background:#fef3c7;color:#92400e}.chip.p{background:#f3e8ff;color:#6b21a8}
+.empty{color:var(--muted);text-align:center;padding:30px}
+/* drawer */
+.dim{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(560px,100%);background:#fff;z-index:51;overflow-y:auto;padding:18px;box-shadow:-10px 0 40px rgba(0,0,0,.2)}
+.drawer h3{margin:4px 0 2px;overflow-wrap:anywhere}.drawer .close{float:right}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:6px 12px;font-size:.9rem;margin:14px 0}.kv dt{color:var(--muted)}.kv dd{margin:0;overflow-wrap:anywhere}
+.acts{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
+.msg{white-space:pre-wrap;background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:10px;overflow-wrap:anywhere}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--navy);color:#fff;padding:11px 18px;border-radius:999px;z-index:60;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,.25);max-width:calc(100% - 24px)}
+@media (max-width:560px){header.top .who{display:none}.kv{grid-template-columns:1fr}.kv dt{margin-top:6px}}
+</style>
+</head>
+<body>
+
+<!-- Sign in -->
+<section class="login hidden" id="login">
+  <form class="login-card" id="login-form" autocomplete="on">
+    <img src="/icons/icon-96.png" alt="">
+    <h1>ServiceHub Admin</h1>
+    <p>Sign in with the ServiceHub Kenya admin account.</p>
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="username" required>
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password" required>
+    <button class="btn pri block" id="login-btn" type="submit"><i class="fas fa-sign-in-alt"></i> Sign in</button>
+    <div class="err" id="login-err"></div>
+    <p style="margin-top:14px;font-size:.82rem">Signed up with Google? <a href="/">Sign in on the main site</a>, then come back to <b>/admin</b>.</p>
+  </form>
+</section>
+
+<!-- Portal -->
+<div id="app" class="hidden">
+  <div class="stick">
+  <header class="top">
+    <img src="/icons/icon-96.png" alt="">
+    <div><b>ServiceHub Admin</b><small>ServiceHub Kenya · A product of Jatelo Technologies</small></div>
+    <div class="sp"></div>
+    <div class="who" id="who"></div>
+    <a class="btn" href="/" title="Open the site"><i class="fas fa-globe-africa"></i></a>
+    <button class="btn" id="logout" title="Sign out"><i class="fas fa-sign-out-alt"></i></button>
+  </header>
+  <nav class="tabs" id="tabs">
+    <button data-tab="overview" class="on"><i class="fas fa-chart-pie"></i> Overview</button>
+    <button data-tab="users"><i class="fas fa-users"></i> Users</button>
+    <button data-tab="jobs"><i class="fas fa-briefcase"></i> Jobs</button>
+    <button data-tab="messages"><i class="fas fa-envelope"></i> Messages<span class="badge hidden" id="msg-badge"></span></button>
+  </nav>
+  </div>
+  <main id="main"></main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  const $ = (s, el = document) => el.querySelector(s);
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const kes = (n) => n == null ? "—" : "KES " + Number(n).toLocaleString("en-KE");
+  const when = (d) => { if (!d) return "—"; const t = new Date(d); return isNaN(t) ? "—" : t.toLocaleString("en-KE", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); };
+  const ini = (n) => String(n || "?").split(" ").filter(Boolean).map((x) => x[0]).join("").toUpperCase().slice(0, 2) || "?";
+  const STATUS = { open: ["Open", "b"], "awaiting-provider": ["Awaiting provider", "p"], "in-progress": ["In progress", "a"], "pending-completion": ["Awaiting confirmation", "a"], completed: ["Completed", "g"], cancelled: ["Cancelled", "r"], disputed: ["Disputed", "r"], closed: ["Closed", ""] };
+  const chipStatus = (s) => { const v = STATUS[s] || [s || "—", ""]; return `<span class="chip ${v[1]}">${esc(v[0])}</span>`; };
+
+  let token = null; try { token = localStorage.getItem("sh_token"); } catch (e) {}
+  let tab = "overview";
+
+  function toast(t) { const d = document.createElement("div"); d.className = "toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); }
+  async function api(path, opts = {}) {
+    const r = await fetch("/api" + path, { ...opts, headers: { "Content-Type": "application/json", Authorization: "Bearer " + token, ...(opts.headers || {}) } });
+    const d = await r.json().catch(() => ({ success: false, message: "Server error (" + r.status + ")" }));
+    if (r.status === 401) { showLogin("Your session has ended. Please sign in again."); throw new Error("401"); }
+    return d;
+  }
+
+  function showLogin(msg) { $("#app").classList.add("hidden"); $("#login").classList.remove("hidden"); $("#login-err").textContent = msg || ""; }
+
+  async function start() {
+    if (!token) return showLogin();
+    let d; try { d = await api("/admin/me"); } catch (e) { return; }
+    if (!d.success) return showLogin(d.code === "NOT_ADMIN" ? "This account is not an admin. Sign in with the admin account." : d.message);
+    $("#who").innerHTML = `<b>${esc(d.admin.name || "Admin")}</b><br>${esc(d.admin.email)}`;
+    $("#login").classList.add("hidden"); $("#app").classList.remove("hidden");
+    go(tab);
+  }
+
+  $("#login-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = $("#login-btn"); btn.disabled = true; $("#login-err").textContent = "";
+    try {
+      const r = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: $("#email").value.trim(), password: $("#password").value }) });
+      const d = await r.json();
+      if (!d.success) { $("#login-err").textContent = d.message || "Sign in failed"; return; }
+      token = d.token; try { localStorage.setItem("sh_token", token); } catch (e2) {}
+      if (!d.user.isAdmin) { $("#login-err").textContent = "This account is not an admin."; return; }
+      start();
+    } catch (err) { $("#login-err").textContent = "Cannot reach ServiceHub. Check your connection."; }
+    finally { btn.disabled = false; }
+  });
+  $("#logout").onclick = () => { try { localStorage.removeItem("sh_token"); } catch (e) {} token = null; showLogin("Signed out."); };
+  $("#tabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-tab]"); if (b) go(b.dataset.tab); });
+
+  function go(t) {
+    tab = t;
+    document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === t));
+    ({ overview, users, jobs, messages })[t]();
+    window.scrollTo(0, 0);
+  }
+  const main = () => $("#main");
+  const loading = () => { main().innerHTML = `<div class="empty"><i class="fas fa-spinner fa-spin"></i> Loading…</div>`; };
+
+  /* ── Overview ── */
+  async function overview() {
+    loading();
+    const d = await api("/admin/overview").catch(() => null);
+    if (!d || !d.success) { main().innerHTML = `<div class="empty">${esc((d && d.message) || "Could not load")}</div>`; return; }
+    const o = d.overview;
+    setBadge(o.contactMessages.open);
+    const st = o.jobs.byStatus || {};
+    const maxC = Math.max(1, ...o.jobs.topCounties.map((c) => c.count));
+    const maxK = Math.max(1, ...o.jobs.topCategories.map((c) => c.count));
+    main().innerHTML = `
+      <div class="grid">
+        <div class="card stat"><b>${o.users.total}</b><span>Users</span><small>+${o.users.new7} this week</small></div>
+        <div class="card stat"><b>${o.users.providers}</b><span>Service providers</span></div>
+        <div class="card stat"><b>${o.jobs.total}</b><span>Jobs posted</span><small>+${o.jobs.new7} this week</small></div>
+        <div class="card stat"><b>${st.open || 0}</b><span>Open jobs</span></div>
+        <div class="card stat"><b>${(st["in-progress"] || 0) + (st["pending-completion"] || 0)}</b><span>Jobs in progress</span></div>
+        <div class="card stat"><b>${st.completed || 0}</b><span>Jobs completed</span></div>
+        <div class="card stat"><b>${o.quotes.total}</b><span>Quotes sent</span><small>${o.quotes.accepted} accepted</small></div>
+        <div class="card stat"><b>${o.conversations}</b><span>Chats started</span></div>
+        <div class="card stat"><b>${o.users.suspended}</b><span>Suspended users</span></div>
+        <div class="card stat"><b>${o.contactMessages.open}</b><span>Unread messages</span></div>
+      </div>
+      <div class="two" style="margin-top:14px">
+        <div class="card"><h2 style="margin-top:0">Newest users</h2>${o.recentUsers.map((u) => `<div class="row"><div class="t"><b>${esc(u.name)}</b><small>${esc(u.email)} · ${when(u.createdAt)}</small></div>${u.roles.includes("service-provider") ? '<span class="chip g">Provider</span>' : '<span class="chip b">Client</span>'}</div>`).join("") || '<div class="empty">No users yet</div>'}</div>
+        <div class="card"><h2 style="margin-top:0">Newest jobs</h2>${o.recentJobs.map((j) => `<div class="row"><div class="t"><b>${esc(j.title)}</b><small>${esc(j.county || "")} · ${when(j.createdAt)}</small></div>${chipStatus(j.status)}</div>`).join("") || '<div class="empty">No jobs yet</div>'}</div>
+        <div class="card"><h2 style="margin-top:0">Jobs by county</h2>${o.jobs.topCounties.map((c) => `<div style="margin:8px 0"><div style="display:flex;justify-content:space-between"><span>${esc(c.name)}</span><b>${c.count}</b></div><div class="bar"><i style="width:${(c.count / maxC) * 100}%"></i></div></div>`).join("") || '<div class="empty">—</div>'}</div>
+        <div class="card"><h2 style="margin-top:0">Jobs by service</h2>${o.jobs.topCategories.map((c) => `<div style="margin:8px 0"><div style="display:flex;justify-content:space-between"><span>${esc(c.name)}</span><b>${c.count}</b></div><div class="bar"><i style="width:${(c.count / maxK) * 100}%;background:var(--green)"></i></div></div>`).join("") || '<div class="empty">—</div>'}</div>
+      </div>`;
+  }
+
+  /* ── Users ── */
+  let uq = "", uf = "all";
+  async function users() {
+    main().innerHTML = `<div class="toolbar"><input id="uq" placeholder="Search name, email, phone, county, skills" value="${esc(uq)}">
+      <select id="uf"><option value="all">All users</option><option value="providers">Service providers</option><option value="clients">Clients only</option><option value="unverified">Email not verified</option><option value="suspended">Suspended</option></select></div><div id="ul" class="list"></div>`;
+    $("#uf").value = uf;
+    let t; $("#uq").oninput = (e) => { clearTimeout(t); t = setTimeout(() => { uq = e.target.value; loadUsers(); }, 300); };
+    $("#uf").onchange = (e) => { uf = e.target.value; loadUsers(); };
+    loadUsers();
+  }
+  async function loadUsers() {
+    const box = $("#ul"); if (!box) return;
+    box.innerHTML = `<div class="empty"><i class="fas fa-spinner fa-spin"></i></div>`;
+    const d = await api(`/admin/users?q=${encodeURIComponent(uq)}&filter=${uf}`).catch(() => null);
+    if (!d || !d.success) { box.innerHTML = `<div class="empty">${esc((d && d.message) || "Could not load")}</div>`; return; }
+    box.innerHTML = `<div style="color:var(--muted);font-size:.85rem">${d.total} user${d.total === 1 ? "" : "s"}</div>` + (d.users.map((u) => `
+      <div class="item" data-uid="${esc(u.uid)}"><div class="av">${esc(ini(u.name))}</div><div class="t"><b>${esc(u.name)}</b>
+        <div class="meta"><span><i class="fas fa-envelope"></i> ${esc(u.email)}</span>${u.phone ? `<span><i class="fas fa-phone"></i> ${esc(u.phone)}</span>` : ""}${u.county ? `<span><i class="fas fa-map-marker-alt"></i> ${esc(u.county)}</span>` : ""}<span>Joined ${when(u.createdAt)}</span></div>
+        <div>${u.roles.includes("service-provider") ? '<span class="chip g">Provider</span>' : ""}<span class="chip b">Client</span>${u.isAdmin ? '<span class="chip p">Admin</span>' : ""}${u.active === false ? '<span class="chip r">Suspended</span>' : ""}${u.emailVerified ? "" : '<span class="chip a">Email not verified</span>'}</div></div></div>`).join("") || `<div class="empty">No users found</div>`);
+    box.querySelectorAll(".item").forEach((el) => el.onclick = () => openUser(el.dataset.uid));
+  }
+  async function openUser(uid) {
+    const dr = drawer(`<div class="empty"><i class="fas fa-spinner fa-spin"></i></div>`);
+    const d = await api("/admin/users/" + encodeURIComponent(uid)).catch(() => null);
+    if (!d || !d.success) { dr.body.innerHTML = `<div class="empty">${esc((d && d.message) || "Could not load")}</div>`; return; }
+    const u = d.user, prov = u.roles.includes("service-provider");
+    dr.body.innerHTML = `
+      <h3>${esc(u.name)}</h3>
+      <div>${prov ? '<span class="chip g">Provider</span>' : ""}<span class="chip b">Client</span>${u.isAdmin ? '<span class="chip p">Admin</span>' : ""}${u.active === false ? '<span class="chip r">Suspended</span>' : '<span class="chip g">Active</span>'}</div>
+      <dl class="kv"><dt>Email</dt><dd>${esc(u.email)} ${u.emailVerified ? '<span class="chip g">verified</span>' : '<span class="chip a">not verified</span>'}</dd>
+        <dt>Phone</dt><dd>${esc(u.phone || "—")}</dd><dt>Location</dt><dd>${esc([u.subcounty, u.county].filter(Boolean).join(", ") || "—")}</dd>
+        <dt>Mode now</dt><dd>${u.role === "service-provider" ? "Working (provider)" : "Hiring (client)"}</dd>
+        <dt>Skills</dt><dd>${esc((u.skills || []).join(", ") || "—")}</dd><dt>Bio</dt><dd>${esc(u.bio || "—")}</dd>
+        <dt>Rating</dt><dd>${u.rating || 0} ⭐ (${u.reviewCount || 0} reviews)</dd><dt>Sign-in</dt><dd>${esc(u.authProvider || "email & password")}</dd>
+        <dt>Joined</dt><dd>${when(u.createdAt)}</dd><dt>Last login</dt><dd>${when(u.lastLogin)}</dd><dt>Quotes sent</dt><dd>${d.quotesSent}</dd></dl>
+      <div class="acts">
+        ${u.isAdmin ? "" : (u.active === false ? `<button class="btn ok" data-act="active" data-v="1"><i class="fas fa-user-check"></i> Reactivate</button>` : `<button class="btn danger" data-act="active" data-v="0"><i class="fas fa-user-slash"></i> Suspend</button>`)}
+        ${u.emailVerified ? "" : `<button class="btn ghost" data-act="emailVerified" data-v="1"><i class="fas fa-check-circle"></i> Mark email verified</button>`}
+        ${prov ? `<button class="btn ghost" data-act="provider" data-v="0"><i class="fas fa-tools"></i> Remove provider role</button>` : `<button class="btn ghost" data-act="provider" data-v="1"><i class="fas fa-tools"></i> Make service provider</button>`}
+        ${u.phone ? `<a class="btn ghost" href="tel:${esc(u.phone)}"><i class="fas fa-phone"></i> Call</a>` : ""}
+        <a class="btn ghost" href="mailto:${esc(u.email)}"><i class="fas fa-envelope"></i> Email</a>
+      </div>
+      <h2>Jobs posted (${d.jobsPosted.length})</h2>${d.jobsPosted.map((j) => `<div class="row" style="cursor:pointer" data-job="${esc(j.id)}"><div class="t"><b>${esc(j.title)}</b><small>${esc(j.county || "")} · ${when(j.createdAt)}</small></div>${chipStatus(j.status)}</div>`).join("") || '<div class="empty">None</div>'}
+      <h2>Jobs worked on (${d.jobsWorked.length})</h2>${d.jobsWorked.map((j) => `<div class="row" style="cursor:pointer" data-job="${esc(j.id)}"><div class="t"><b>${esc(j.title)}</b><small>${esc(j.county || "")} · ${when(j.createdAt)}</small></div>${chipStatus(j.status)}</div>`).join("") || '<div class="empty">None</div>'}`;
+    dr.body.querySelectorAll("[data-act]").forEach((b) => b.onclick = async () => {
+      const field = b.dataset.act, v = b.dataset.v === "1";
+      if (field === "active" && !v && !confirmText(`Suspend ${u.name}? They won't be able to sign in until you reactivate them.`)) return;
+      b.disabled = true;
+      const r = await api("/admin/users/" + encodeURIComponent(uid), { method: "PATCH", body: JSON.stringify({ [field]: v }) }).catch(() => null);
+      if (r && r.success) { toast("Saved"); openUser(uid); if (tab === "users") loadUsers(); } else { b.disabled = false; toast((r && r.message) || "Could not save"); }
+    });
+    dr.body.querySelectorAll("[data-job]").forEach((el) => el.onclick = () => openJob(el.dataset.job));
+  }
+
+  /* ── Jobs ── */
+  let jq = "", js = "all";
+  async function jobs() {
+    main().innerHTML = `<div class="toolbar"><input id="jq" placeholder="Search title, county, service, client" value="${esc(jq)}">
+      <select id="js"><option value="all">All jobs</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join("")}</select></div><div id="jl" class="list"></div>`;
+    $("#js").value = js;
+    let t; $("#jq").oninput = (e) => { clearTimeout(t); t = setTimeout(() => { jq = e.target.value; loadJobs(); }, 300); };
+    $("#js").onchange = (e) => { js = e.target.value; loadJobs(); };
+    loadJobs();
+  }
+  async function loadJobs() {
+    const box = $("#jl"); if (!box) return;
+    box.innerHTML = `<div class="empty"><i class="fas fa-spinner fa-spin"></i></div>`;
+    const d = await api(`/admin/jobs?q=${encodeURIComponent(jq)}&status=${js}`).catch(() => null);
+    if (!d || !d.success) { box.innerHTML = `<div class="empty">${esc((d && d.message) || "Could not load")}</div>`; return; }
+    box.innerHTML = `<div style="color:var(--muted);font-size:.85rem">${d.total} job${d.total === 1 ? "" : "s"}</div>` + (d.jobs.map((j) => `
+      <div class="item" data-id="${esc(j.id)}"><div class="av" style="border-radius:12px;background:linear-gradient(135deg,#f59e0b,#ef4444)"><i class="fas fa-briefcase"></i></div><div class="t"><b>${esc(j.title)}</b>
+        <div class="meta"><span><i class="fas fa-user"></i> ${esc(j.clientName || "—")}</span><span><i class="fas fa-map-marker-alt"></i> ${esc([j.subcounty, j.county].filter(Boolean).join(", ") || "—")}</span><span>${kes(j.budgetMin)} – ${kes(j.budgetMax)}</span><span>${j.quotesCount} quote${j.quotesCount === 1 ? "" : "s"}</span><span>${when(j.createdAt)}</span></div>
+        <div>${chipStatus(j.status)}${j.category ? `<span class="chip">${esc(j.category)}</span>` : ""}${j.assignedProviderName ? `<span class="chip g">${esc(j.assignedProviderName)}</span>` : ""}</div></div></div>`).join("") || `<div class="empty">No jobs found</div>`);
+    box.querySelectorAll(".item").forEach((el) => el.onclick = () => openJob(el.dataset.id));
+  }
+  async function openJob(id) {
+    const dr = drawer(`<div class="empty"><i class="fas fa-spinner fa-spin"></i></div>`);
+    const d = await api("/admin/jobs/" + encodeURIComponent(id)).catch(() => null);
+    if (!d || !d.success) { dr.body.innerHTML = `<div class="empty">${esc((d && d.message) || "Could not load")}</div>`; return; }
+    const j = d.job;
+    dr.body.innerHTML = `
+      <h3>${esc(j.title)}</h3><div>${chipStatus(j.status)}${j.category ? `<span class="chip">${esc(j.category)}</span>` : ""}</div>
+      <dl class="kv"><dt>Client</dt><dd><a href="#" data-user="${esc(j.clientId)}">${esc(j.clientName || j.clientId)}</a></dd>
+        <dt>Provider</dt><dd>${j.assignedProviderId ? `<a href="#" data-user="${esc(j.assignedProviderId)}">${esc(j.assignedProviderName || j.assignedProviderId)}</a>` : "—"}</dd>
+        <dt>Location</dt><dd>${esc([j.subcounty, j.county].filter(Boolean).join(", ") || "—")}</dd><dt>Budget</dt><dd>${kes(j.budgetMin)} – ${kes(j.budgetMax)}</dd>
+        <dt>Agreed</dt><dd>${j.acceptedAmount ? kes(j.acceptedAmount) : "—"}</dd><dt>Photos</dt><dd>${j.photosCount}</dd>
+        <dt>Posted</dt><dd>${when(j.createdAt)}</dd>${j.cancelReason ? `<dt>Cancelled</dt><dd>${esc(j.cancelReason)}</dd>` : ""}</dl>
+      <div class="msg">${esc(j.description || "")}</div>
+      <div class="acts">
+        ${j.status !== "cancelled" && j.status !== "completed" ? `<button class="btn ghost" id="j-cancel"><i class="fas fa-ban"></i> Cancel job</button>` : ""}
+        <button class="btn danger" id="j-del"><i class="fas fa-trash"></i> Delete job</button>
+      </div>
+      <h2>Quotes (${d.quotes.length})</h2>${d.quotes.map((q) => `<div class="row"><div class="t"><b><a href="#" data-user="${esc(q.providerId)}">${esc(q.providerName || "Provider")}</a></b><small>${when(q.createdAt)}${q.message ? " · " + esc(q.message) : ""}</small></div><div style="text-align:right"><b>${kes(q.amount)}</b><br><span class="chip">${esc(q.status)}</span></div></div>`).join("") || '<div class="empty">No quotes</div>'}`;
+    dr.body.querySelectorAll("[data-user]").forEach((a) => a.onclick = (e) => { e.preventDefault(); openUser(a.dataset.user); });
+    const c = $("#j-cancel", dr.body);
+    if (c) c.onclick = async () => {
+      const reason = prompt("Reason shown to the client (e.g. Duplicate job, Not allowed on ServiceHub):", "Removed by ServiceHub admin");
+      if (reason === null) return;
+      const r = await api(`/admin/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST", body: JSON.stringify({ reason }) }).catch(() => null);
+      if (r && r.success) { toast("Job cancelled"); openJob(id); if (tab === "jobs") loadJobs(); } else toast((r && r.message) || "Could not cancel");
+    };
+    $("#j-del", dr.body).onclick = async () => {
+      if (!confirmText(`Delete "${j.title}" and all its quotes for good? This can't be undone.`)) return;
+      const r = await api(`/admin/jobs/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => null);
+      if (r && r.success) { toast("Job deleted"); dr.close(); if (tab === "jobs") loadJobs(); } else toast((r && r.message) || "Could not delete");
+    };
+  }
+
+  /* ── Contact messages ── */
+  async function messages() {
+    loading();
+    const d = await api("/admin/messages").catch(() => null);
+    if (!d || !d.success) { main().innerHTML = `<div class="empty">${esc((d && d.message) || "Could not load")}</div>`; return; }
+    setBadge(d.messages.filter((m) => !m.handled).length);
+    main().innerHTML = `<div class="list">${d.messages.map((m) => `
+      <div class="card" style="${m.handled ? "opacity:.7" : "border-left:4px solid var(--blue)"}">
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><div style="min-width:0"><b style="overflow-wrap:anywhere">${esc(m.subject)}</b><div class="meta" style="color:var(--muted);font-size:.83rem">${esc(m.name)} · <a href="mailto:${esc(m.email)}?subject=${encodeURIComponent("Re: " + (m.subject || ""))}">${esc(m.email)}</a> · ${when(m.createdAt)}</div></div>
+        <button class="btn ${m.handled ? "ghost" : "ok"}" data-id="${esc(m.id)}" data-h="${m.handled ? 0 : 1}"><i class="fas ${m.handled ? "fa-undo" : "fa-check"}"></i> ${m.handled ? "Mark unread" : "Mark done"}</button></div>
+        <div class="msg">${esc(m.message)}</div></div>`).join("") || `<div class="empty">No messages from the contact form yet</div>`}</div>`;
+    main().querySelectorAll("button[data-id]").forEach((b) => b.onclick = async () => {
+      b.disabled = true;
+      const r = await api("/admin/messages/" + encodeURIComponent(b.dataset.id), { method: "PATCH", body: JSON.stringify({ handled: b.dataset.h === "1" }) }).catch(() => null);
+      if (r && r.success) messages(); else { b.disabled = false; toast("Could not update"); }
+    });
+  }
+
+  function setBadge(n) { const b = $("#msg-badge"); b.textContent = n; b.classList.toggle("hidden", !n); }
+  function confirmText(t) { return window.confirm(t); }
+  function drawer(html) {
+    document.querySelectorAll(".dim,.drawer").forEach((e) => e.remove());
+    const dim = document.createElement("div"); dim.className = "dim";
+    const dr = document.createElement("aside"); dr.className = "drawer"; dr.setAttribute("role", "dialog");
+    dr.innerHTML = `<button class="btn ghost close" aria-label="Close"><i class="fas fa-times"></i></button><div class="body">${html}</div>`;
+    document.body.append(dim, dr);
+    const close = () => { dim.remove(); dr.remove(); };
+    dim.onclick = close; dr.querySelector(".close").onclick = close;
+    document.addEventListener("keydown", function k(e) { if (e.key === "Escape") { close(); document.removeEventListener("keydown", k); } });
+    return { body: dr.querySelector(".body"), close };
+  }
+
+  start();
+})();
+</script>
+</body>
+</html>
