@@ -138,6 +138,7 @@
   .snm-listicon{width:64px;height:64px;border-radius:16px;background:#fff4e6;color:#f28a12;display:flex;align-items:center;justify-content:center;font-size:1.8rem;flex:none}
   .snm-divider{height:1px;background:var(--light-gray);margin:34px 0 30px}
   .snm-bar{background:var(--white);border:1px solid var(--light-gray);border-radius:14px;padding:14px;display:grid;grid-template-columns:2fr 1fr;gap:10px}
+  #snm-search-panel.near .snm-bar{grid-template-columns:1fr}
   .snm-bar .snm-loc{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .snm-bar input,.snm-bar select,.snm-form input,.snm-form select,.snm-form textarea{width:100%;padding:11px 12px;border:1.5px solid var(--light-gray);border-radius:10px;font:inherit;font-size:.92rem;background:var(--white);color:var(--dark)}
   .snm-chip{display:inline-flex;align-items:center;gap:6px;background:#e3f2fd;color:#0d47a1;border-radius:20px;padding:6px 10px;font-size:.82rem;font-weight:600;max-width:100%}
@@ -198,7 +199,7 @@
 
   /* ── State ── */
   const S = { q: "", category: "all", county: "all", radiusKm: "", from: null, list: [], total: 0, loading: false };
-  try { const saved = JSON.parse(localStorage.getItem("sh_near_loc") || "null"); if (saved && isFinite(saved.lat)) S.from = saved; } catch (e) {}
+  try { const saved = JSON.parse(localStorage.getItem("sh_near_loc") || "null"); if (saved && isFinite(saved.lat)) { S.from = saved; if (saved.label === "My current location") S.from.auto = true; } } catch (e) {}
   const saveFrom = () => { try { S.from ? localStorage.setItem("sh_near_loc", JSON.stringify(S.from)) : localStorage.removeItem("sh_near_loc"); } catch (e) {} };
 
   /* ── Tabs at the top of Find Services: List your service · Services near me · All services ── */
@@ -231,7 +232,7 @@
               <button class="sh-btn ghost" type="button" id="snm-gps"><i class="fas fa-location-crosshairs"></i> Near me</button>
               <button class="sh-btn ghost" type="button" id="snm-pick"><i class="fas fa-map-pin"></i> Choose on map</button>
               <span id="snm-from"></span>
-              <select id="snm-radius" style="width:auto;flex:none"><option value="">Any distance</option><option value="2">Within 2 km</option><option value="5">Within 5 km</option><option value="10">Within 10 km</option><option value="25">Within 25 km</option><option value="50">Within 50 km</option></select>
+              <select id="snm-radius" style="width:auto;flex:none"><option value="2">Within 2 km</option><option value="5">Within 5 km</option><option value="10" selected>Within 10 km</option><option value="25">Within 25 km</option><option value="50">Within 50 km</option><option value="">Any distance</option></select>
             </span>
             <button class="sh-btn pri" type="button" id="snm-go" style="margin-left:auto"><i class="fas fa-search"></i> Search</button>
           </div>
@@ -262,6 +263,8 @@
     $("snm-list-panel").style.display = mode === "list" ? "" : "none";
     $("snm-search-panel").style.display = mode === "list" ? "none" : "";
     $("snm-loc-tools").style.display = mode === "near" ? "contents" : "none";
+    $("snm-county").style.display = mode === "near" ? "none" : "";
+    $("snm-search-panel").classList.toggle("near", mode === "near");
     renderFrom();
     if (!quiet && mode !== "list") search();
   }
@@ -272,17 +275,25 @@
       : "";
     $("snm-radius").disabled = !S.from;
   }
-  window.shNearClear = () => { S.from = null; saveFrom(); $("snm-radius").value = ""; renderFrom(); search(); };
+  window.shNearClear = () => { S.from = null; S.locateFailed = true; saveFrom(); renderFrom(); search(); };
 
+  // Finds where the person is. Runs by itself when "Services near me" opens; the Near me button runs it again.
   function useMyLocation() {
-    if (!navigator.geolocation) { notify("This device can't share its location. Use Choose on map instead.", "error"); return; }
-    const b = $("snm-gps"); b.disabled = true; b.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Finding you…';
+    const failMsg = (html) => {
+      S.locating = false; S.locateFailed = true; done();
+      if (S.mode === "near" && !S.from) { $("snm-count").textContent = ""; $("snm-grid").innerHTML = `<div class="snm-empty"><i class="fas fa-map-marker-alt" style="font-size:2rem;margin-bottom:10px;display:block;color:#e53935"></i>${html}</div>`; }
+      else notify(html.replace(/<[^>]+>/g, ""), "error");
+    };
+    const b = $("snm-gps");
     const done = () => { b.disabled = false; b.innerHTML = '<i class="fas fa-location-crosshairs"></i> Near me'; };
-    const ok = (p) => { done(); S.from = { lat: p.coords.latitude, lng: p.coords.longitude, label: "My current location" }; saveFrom(); renderFrom(); search(); };
+    if (!navigator.geolocation) { failMsg("This device can't share its location. Tap <b>Choose on map</b> to set where you are."); return; }
+    S.locating = true; b.disabled = true; b.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Finding you…';
+    if (S.mode === "near" && !S.from) { $("snm-count").textContent = ""; $("snm-grid").innerHTML = '<div class="snm-empty"><i class="fas fa-location-crosshairs fa-spin" style="font-size:2rem;margin-bottom:10px;display:block;color:var(--primary)"></i>Finding where you are… If your phone asks, tap <b>Allow</b>.</div>'; }
+    const ok = (p) => { S.locating = false; S.locateFailed = false; done(); S.from = { lat: p.coords.latitude, lng: p.coords.longitude, label: "My current location", auto: true, at: Date.now() }; saveFrom(); renderFrom(); search(); };
     const fail = (e, retried) => {
-      if (e && e.code === 1) { done(); notify("Location is blocked. Allow location for ServiceHub in your phone or browser settings, or use Choose on map.", "error"); return; }
+      if (e && e.code === 1) { failMsg("Location is off for ServiceHub. Allow it in your phone <b>Settings → Apps → ServiceHub Kenya → Permissions → Location</b> (or the browser's site settings), then tap <b>Near me</b>. You can also tap <b>Choose on map</b>."); return; }
       if (!retried) { navigator.geolocation.getCurrentPosition(ok, (e2) => fail(e2, true), { enableHighAccuracy: false, timeout: 20000, maximumAge: 300000 }); return; }
-      done(); notify("Couldn't get your location. Switch on Location (GPS) and try again, or use Choose on map.", "error");
+      failMsg("Couldn't find your location. Switch on your phone's Location (GPS) and tap <b>Near me</b>, or tap <b>Choose on map</b>.");
     };
     navigator.geolocation.getCurrentPosition(ok, (e) => fail(e, false), { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
   }
@@ -297,12 +308,20 @@
   async function search() {
     if (!$("snm-grid") || S.mode === "list") return;
     const near = S.mode === "near";
-    S.q = S.picker.text; S.category = S.picker.picked ? S.picker.picked.v : "all"; S.county = $("snm-county").value; S.radiusKm = near && S.from ? $("snm-radius").value : "";
+    S.q = S.picker.text; S.category = S.picker.picked ? S.picker.picked.v : "all";
+    S.county = near ? "all" : $("snm-county").value; // near me uses your location, not a county
+    S.radiusKm = near && S.from ? $("snm-radius").value : "";
     const grid = $("snm-grid");
-    if (near && !S.from) {
-      $("snm-count").textContent = "";
-      grid.innerHTML = `<div class="snm-empty"><i class="fas fa-map-marker-alt" style="font-size:2rem;margin-bottom:10px;display:block;color:#e53935"></i>Where are you? Tap <b>Near me</b> or <b>Choose on map</b> above to see the providers closest to you.</div>`;
-      return;
+    if (near) {
+      if (!S.from) {
+        if (S.locating) return;
+        if (!S.locateFailed) { useMyLocation(); return; }
+        $("snm-count").textContent = "";
+        grid.innerHTML = `<div class="snm-empty"><i class="fas fa-map-marker-alt" style="font-size:2rem;margin-bottom:10px;display:block;color:#e53935"></i>Tap <b>Near me</b> to use your location, or <b>Choose on map</b>.</div>`;
+        return;
+      }
+      // A location found by GPS more than 5 minutes ago is refreshed quietly
+      if (S.from.auto && (!S.from.at || Date.now() - S.from.at > 300000) && !S.locating) setTimeout(useMyLocation, 0);
     }
     const p = new URLSearchParams();
     if (S.q) p.set("q", S.q);
@@ -313,7 +332,17 @@
     const d = await api(`/listings?${p}`);
     if (!d.success) { grid.innerHTML = `<div class="snm-empty">${esc(d.message || "Could not load services")} <button class="sh-btn ghost" onclick="shNearSearch()">Try again</button></div>`; $("snm-count").textContent = ""; return; }
     S.list = d.listings || []; S.total = d.total || 0;
-    $("snm-count").textContent = S.total ? `${S.total} service${S.total > 1 ? "s" : ""} found${near ? ", nearest first" : ", newest first"}` : "";
+    let note = "";
+    // Nothing within the chosen distance: show the nearest ones anyway, with their distance
+    if (near && S.radiusKm && !S.list.length) {
+      p.delete("radiusKm"); p.set("limit", "12");
+      const d2 = await api(`/listings?${p}`);
+      if (d2.success && (d2.listings || []).length) {
+        S.list = d2.listings; S.total = d2.listings.length;
+        note = `None within ${S.radiusKm} km of you yet. These are the nearest:`;
+      }
+    }
+    $("snm-count").textContent = note || (S.total ? `${S.total} service${S.total > 1 ? "s" : ""} ${near ? `within ${S.radiusKm ? S.radiusKm + " km" : "any distance"}, nearest first` : "found, newest first"}` : "");
     grid.innerHTML = S.list.length ? S.list.map(card).join("")
       : `<div class="snm-empty"><i class="fas fa-search" style="font-size:2rem;margin-bottom:10px;display:block"></i>No services match yet${S.radiusKm ? ` within ${S.radiusKm} km` : ""}.<br>Try another word${near ? ", a wider distance" : ""} or all service types.<br><br>
          <button class="sh-btn pri" onclick="shListService()"><i class="fas fa-plus"></i> Offer this service? List it free</button></div>`;
