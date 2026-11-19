@@ -1,7 +1,7 @@
 // utils/admin.js
 // ServiceHub Kenya - who is an admin.
-// Admin = the account registered with an admin email address, and that email must be verified
-// (so nobody can become admin just by typing the address or the phone number at sign-up).
+// Admin = the account registered with the admin email address that also has a verified email
+// or the admin phone number on it (the phone number alone never makes anyone admin).
 // Defaults: eokoth2019@gmail.com / 0724090067. Override with ADMIN_EMAILS / ADMIN_PHONES (comma separated).
 
 const EMAILS = String(process.env.ADMIN_EMAILS || "eokoth2019@gmail.com").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
@@ -9,10 +9,13 @@ const PHONES = String(process.env.ADMIN_PHONES || "0724090067").split(",").map((
 
 function phoneKey(p) { return String(p || "").replace(/\D/g, "").slice(-9); }
 
+// The account's email must be an admin email AND it must either have a verified email
+// or carry the admin phone number. (Email + password sign-in proves the person owns the account.)
 function isAdminUser(u) {
   if (!u || u.active === false) return false;
   const email = String(u.email || "").toLowerCase();
-  return EMAILS.includes(email) && u.emailVerified === true;
+  if (!EMAILS.includes(email)) return false;
+  return u.emailVerified === true || PHONES.includes(phoneKey(u.phone));
 }
 
 module.exports = { isAdminUser, ADMIN_EMAILS: EMAILS, ADMIN_PHONES: PHONES, phoneKey };

@@ -310,6 +310,7 @@ router.get("/me", verifyJWT, async (req, res) => {
     safeUser.roles = rolesOf(safeUser);
     safeUser.role = activeRoleOf(safeUser);
     safeUser.isAdmin = isAdminUser(safeUser);
+    safeUser.hasPassword = !!passwordHash;
     return res.json({ success: true, user: safeUser });
   } catch (error) {
     console.error("Get me error:", error);
@@ -334,6 +335,49 @@ router.put("/profile", verifyJWT, async (req, res) => {
   } catch (error) {
     console.error("Update profile error:", error);
     return res.status(500).json({ success: false, message: "Could not update profile" });
+  }
+});
+
+// ── POST /api/auth/change-password (signed in) ────────────────────────────
+// { currentPassword, newPassword }. Accounts made with Google/Facebook can set a first password
+// without a current one.
+router.post("/change-password", verifyJWT, async (req, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+  if (!newPassword || String(newPassword).length < 8) {
+    return res.status(422).json({ success: false, message: "The new password must be at least 8 characters" });
+  }
+  try {
+    const ref = db.collection(COLLECTIONS.USERS).doc(req.user.uid);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ success: false, message: "User not found" });
+    const u = doc.data();
+    const hasPassword = !!u.passwordHash || !u.authProvider;
+    if (hasPassword) {
+      if (!currentPassword) return res.status(422).json({ success: false, message: "Enter your current password" });
+      let ok = u.passwordHash ? await bcrypt.compare(currentPassword, u.passwordHash) : false;
+      if (!ok) ok = await firebasePasswordOk(u.email, currentPassword);
+      if (!ok) return res.status(401).json({ success: false, code: "WRONG_PASSWORD", message: "Your current password is not correct" });
+    }
+    if (currentPassword && currentPassword === newPassword) {
+      return res.status(422).json({ success: false, message: "Choose a password different from your current one" });
+    }
+    // Keep Firebase Auth in step (used for sign-in and password resets)
+    try {
+      await auth.updateUser(u.uid, { password: newPassword });
+    } catch (e) {
+      try {
+        const fu = await auth.getUserByEmail(u.email);
+        await auth.updateUser(fu.uid, { password: newPassword });
+      } catch (e2) {
+        await auth.createUser({ uid: u.uid, email: u.email, password: newPassword }).catch((e3) => console.error("Firebase password sync:", e3.message));
+      }
+    }
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await ref.update({ passwordHash, passwordChangedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    return res.json({ success: true, message: "Password changed. Use your new password next time you sign in." });
+  } catch (error) {
+    console.error("Change password error:", error);
+    return res.status(500).json({ success: false, message: "Could not change your password. Please try again." });
   }
 });
 

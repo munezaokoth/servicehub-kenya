@@ -57,6 +57,8 @@ app.get("/health", (req, res) => {
     firebase: fb,
     jwt: Boolean(process.env.JWT_SECRET),
     email: Boolean(process.env.RESEND_API_KEY),
+    // Needed for "Forgot password" emails when Resend isn't set up
+    firebaseWebKey: Boolean(process.env.FIREBASE_WEB_API_KEY),
     // Calls need a TURN relay to carry audio over Kenyan mobile data (see utils/ice.js)
     callsTurn: turnProvider() || false,
     timestamp: new Date().toISOString(),

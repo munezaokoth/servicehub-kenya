@@ -395,18 +395,65 @@ function loadAccountPanel(opts = {}) {
       ${tile("fa-user-edit", "Edit Profile", "Name, phone, county, bio" + (shIsProvider() ? " and skills" : ""), "openProfileSettings()")}
       ${tile("fa-comments", "Messages", "Chats with clients and providers", "showSection('chat')")}
       ${tile("fa-envelope-open-text", "Email Settings", "Choose which emails you receive", "showSection('email-settings')")}
-      ${tile("fa-key", "Change Password", "We'll email you a secure reset link", "accountPasswordReset()")}
+      ${tile("fa-key", "Change Password", "Set a new password for your account", "accountPasswordReset()")}
       ${tile("fa-sign-out-alt", "Log Out", "Sign out of ServiceHub on this device", "handleLogout()", true)}
     </div>`;
   if (!opts.quiet) panel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
-async function accountPasswordReset() {
-  const email = currentUser && currentUser.email;
-  if (!email) return;
-  if (!confirm(`Send a password reset link to ${email}?`)) return;
-  const res = await fetch(`${API_BASE}/auth/password-reset`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) }).catch(() => null);
-  const data = res ? await res.json().catch(() => ({})) : {};
-  showNotification(data.success ? "Reset link sent. Check your email (and spam folder)." : data.message || "Could not send the reset link", data.success ? "success" : "error");
+// Change password while signed in (no email needed). "Forgot it?" still emails a reset link.
+function accountPasswordReset() {
+  if (!requireLogin()) return;
+  let m = document.getElementById("sh-change-pw");
+  if (!m) {
+    m = document.createElement("div");
+    m.className = "modal";
+    m.id = "sh-change-pw";
+    m.innerHTML = `<div class="modal-content" style="max-width:460px">
+      <div class="modal-header"><h2 class="modal-title"><i class="fas fa-key" style="color:var(--primary);margin-right:10px"></i>Change Password</h2>
+        <button class="modal-close" type="button" aria-label="Close" onclick="document.getElementById('sh-change-pw').classList.remove('active')">&times;</button></div>
+      <div class="modal-body"><form id="sh-cpw-form" autocomplete="on">
+        <input type="text" name="username" autocomplete="username" value="" hidden>
+        <div class="form-group" id="sh-cpw-cur-g"><label class="form-label" for="sh-cpw-cur">Current password</label>
+          <input id="sh-cpw-cur" type="password" class="form-control" autocomplete="current-password"></div>
+        <div class="form-group"><label class="form-label" for="sh-cpw-new">New password</label>
+          <input id="sh-cpw-new" type="password" class="form-control" autocomplete="new-password" minlength="8" required>
+          <small style="color:var(--medium-gray)">At least 8 characters.</small></div>
+        <div class="form-group"><label class="form-label" for="sh-cpw-new2">Confirm new password</label>
+          <input id="sh-cpw-new2" type="password" class="form-control" autocomplete="new-password" minlength="8" required></div>
+        <label style="display:flex;gap:8px;align-items:center;font-size:.9rem;margin:4px 0 14px"><input type="checkbox" id="sh-cpw-show"> Show passwords</label>
+        <button type="submit" class="btn btn-primary btn-block" id="sh-cpw-go"><i class="fas fa-check"></i> Change Password</button>
+        <div style="text-align:center;margin-top:14px;font-size:.9rem"><a href="#" id="sh-cpw-forgot">Forgot your current password? Email me a reset link</a></div>
+      </form></div></div>`;
+    document.body.appendChild(m);
+    m.addEventListener("click", (e) => { if (e.target === m) m.classList.remove("active"); });
+    m.querySelector("#sh-cpw-show").onchange = (e) => m.querySelectorAll("input[type=password],input[data-pw]").forEach((i) => { i.type = e.target.checked ? "text" : "password"; i.dataset.pw = "1"; });
+    m.querySelector("#sh-cpw-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const cur = m.querySelector("#sh-cpw-cur").value, nw = m.querySelector("#sh-cpw-new").value, nw2 = m.querySelector("#sh-cpw-new2").value;
+      if (nw.length < 8) { showNotification("The new password must be at least 8 characters", "error"); return; }
+      if (nw !== nw2) { showNotification("The new passwords do not match", "error"); return; }
+      const btn = m.querySelector("#sh-cpw-go"); btn.disabled = true;
+      const d = await shApi("/auth/change-password", { method: "POST", body: JSON.stringify({ currentPassword: cur, newPassword: nw }) }).catch(() => ({ success: false, message: "Connection error. Please try again." }));
+      btn.disabled = false;
+      if (!d.success) { showNotification(d.message || "Could not change your password", "error"); return; }
+      m.classList.remove("active");
+      m.querySelector("#sh-cpw-form").reset();
+      showNotification(d.message || "Password changed.", "success");
+    });
+    m.querySelector("#sh-cpw-forgot").onclick = async (e) => {
+      e.preventDefault();
+      const email = currentUser && currentUser.email;
+      if (!email) return;
+      const res = await fetch(`${API_BASE}/auth/password-reset`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) }).catch(() => null);
+      const data = res ? await res.json().catch(() => ({})) : {};
+      showNotification(data.success ? `Reset link sent to ${email}. Check your inbox and spam folder.` : data.message || "Could not send the reset link", data.success ? "success" : "error");
+    };
+  }
+  const social = currentUser && currentUser.authProvider && !currentUser.hasPassword;
+  m.querySelector("#sh-cpw-cur-g").style.display = social ? "none" : "";
+  m.querySelector("input[name=username]").value = (currentUser && currentUser.email) || "";
+  m.classList.add("active");
+  setTimeout(() => m.querySelector(social ? "#sh-cpw-new" : "#sh-cpw-cur").focus(), 50);
 }
 
 /* =====================================================================
