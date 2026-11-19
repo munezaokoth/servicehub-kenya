@@ -1,4 +1,4 @@
-/* ServiceHub Kenya - Services Near Me
+/* ServiceHub Kenya - service listings (Find Services: List your service · Services near me · All services)
    Providers (including the informal sector: fundis, mama mboga, boda boda, barbers, kiosks, cobblers ...)
    list the services they offer with a map pin, price and phone. Clients browse or search by service,
    find the ones nearest to them, then Call, WhatsApp or Message in the app. */
@@ -49,8 +49,13 @@
   /* ── Styles ── */
   const st = document.createElement("style");
   st.textContent = `
-  #services-near .snm-head{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:18px}
-  #services-near .snm-head h2{margin:0;color:var(--primary)}#services-near .snm-head p{margin:4px 0 0;color:var(--medium-gray)}
+  .snm-tabs{display:flex;gap:6px;background:var(--white);border:1px solid var(--light-gray);border-radius:14px;padding:6px;margin-bottom:14px;overflow-x:auto}
+  .snm-tabs button{flex:1;border:0;background:none;border-radius:10px;padding:11px 12px;font:inherit;font-weight:600;font-size:.92rem;color:var(--dark-gray);cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:7px}
+  .snm-tabs button.on{background:var(--primary);color:#fff}
+  .snm-listpanel{background:var(--white);border:1px solid var(--light-gray);border-radius:14px;padding:20px;display:flex;gap:18px;align-items:flex-start}
+  .snm-listpanel h3{margin:0 0 6px;color:var(--primary)}.snm-listpanel p{margin:0 0 14px;color:var(--medium-gray);line-height:1.5}
+  .snm-listicon{width:64px;height:64px;border-radius:16px;background:#fff4e6;color:#f28a12;display:flex;align-items:center;justify-content:center;font-size:1.8rem;flex:none}
+  .snm-divider{height:1px;background:var(--light-gray);margin:34px 0 30px}
   .snm-bar{background:var(--white);border:1px solid var(--light-gray);border-radius:14px;padding:14px;display:grid;grid-template-columns:2fr 1.4fr 1.2fr;gap:10px}
   .snm-bar .snm-loc{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .snm-bar input,.snm-bar select,.snm-form input,.snm-form select,.snm-form textarea{width:100%;padding:11px 12px;border:1.5px solid var(--light-gray);border-radius:10px;font:inherit;font-size:.92rem;background:var(--white);color:var(--dark)}
@@ -94,7 +99,7 @@
   .snm-mine{background:var(--white);border:1px solid var(--light-gray);border-radius:14px;padding:14px;margin-bottom:12px;display:flex;gap:12px;align-items:flex-start}
   .snm-mine .snm-ph{width:90px;height:90px;border-radius:10px;flex:none;font-size:1.6rem}
   .snm-mine h3{margin:0 0 4px;font-size:1rem}
-  @media (max-width:720px){.snm-bar{grid-template-columns:1fr}.snm-2{grid-template-columns:1fr}.snm-mine{flex-direction:column}.snm-mine .snm-ph{width:100%;height:140px}}`;
+  @media (max-width:720px){.snm-listpanel{flex-direction:column}.snm-tabs button{flex:none}.snm-bar{grid-template-columns:1fr}.snm-2{grid-template-columns:1fr}.snm-mine{flex-direction:column}.snm-mine .snm-ph{width:100%;height:140px}}`;
   document.head.appendChild(st);
 
   /* ── State ── */
@@ -102,33 +107,49 @@
   try { const saved = JSON.parse(localStorage.getItem("sh_near_loc") || "null"); if (saved && isFinite(saved.lat)) S.from = saved; } catch (e) {}
   const saveFrom = () => { try { S.from ? localStorage.setItem("sh_near_loc", JSON.stringify(S.from)) : localStorage.removeItem("sh_near_loc"); } catch (e) {} };
 
-  /* ── Page section ── */
+  /* ── Tabs at the top of Find Services: List your service · Services near me · All services ── */
+  S.mode = "near";
   function buildSection() {
-    if ($("services-near")) return;
-    const sec = document.createElement("section");
-    sec.id = "services-near"; sec.className = "app-section";
-    sec.innerHTML = `<div class="section"><div class="container">
-      <div class="snm-head"><div><h2><i class="fas fa-map-marked-alt"></i> Services Near Me</h2>
-        <p>Find fundis, boda bodas, barbers, mama mbogas, caterers and every kind of service near you, then call or chat with them directly.</p></div>
-        <button class="sh-btn pri" onclick="shListService()"><i class="fas fa-plus"></i> List your service</button></div>
-      <div class="snm-bar">
-        <input id="snm-q" type="search" placeholder="What do you need? e.g. plumber, shoe repair, chapati" autocomplete="off">
-        <select id="snm-cat">${categoryOptions(true)}</select>
-        <select id="snm-county">${countyOptions()}</select>
-        <div class="snm-loc">
-          <button class="sh-btn ghost" type="button" id="snm-gps"><i class="fas fa-location-crosshairs"></i> Near me</button>
-          <button class="sh-btn ghost" type="button" id="snm-pick"><i class="fas fa-map-pin"></i> Choose on map</button>
-          <span id="snm-from"></span>
-          <select id="snm-radius" style="width:auto;flex:none"><option value="">Any distance</option><option value="2">Within 2 km</option><option value="5">Within 5 km</option><option value="10">Within 10 km</option><option value="25">Within 25 km</option><option value="50">Within 50 km</option></select>
-          <button class="sh-btn pri" type="button" id="snm-go" style="margin-left:auto"><i class="fas fa-search"></i> Search</button>
-        </div>
+    if ($("snm-wrap")) return;
+    const host = document.querySelector("#find-services .container");
+    if (!host) return;
+    const wrap = document.createElement("div");
+    wrap.id = "snm-wrap";
+    wrap.innerHTML = `
+      <div class="snm-tabs" role="tablist">
+        <button type="button" role="tab" data-mode="list"><i class="fas fa-plus-circle"></i> List your service</button>
+        <button type="button" role="tab" data-mode="near"><i class="fas fa-map-marked-alt"></i> Services near me</button>
+        <button type="button" role="tab" data-mode="all"><i class="fas fa-th-large"></i> All services</button>
       </div>
-      <div class="snm-count" id="snm-count"></div>
-      <div class="snm-grid" id="snm-grid"></div>
-    </div></div>`;
-    const before = $("find-services");
-    (before ? before.parentNode : document.body).insertBefore(sec, before || null);
+      <div id="snm-list-panel" class="snm-listpanel">
+        <div class="snm-listicon"><i class="fas fa-store"></i></div>
+        <div><h3>Offer your service on ServiceHub, free</h3>
+          <p>Fundi, boda boda, barber, mama mboga, caterer, cleaner, tutor, kiosk or any other service: list what you do with your location, price and phone number. Clients near you will find you and call, WhatsApp or message you directly.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="sh-btn pri" onclick="shListService()"><i class="fas fa-plus"></i> List your service</button>
+            <button class="sh-btn ghost" onclick="shMyServices()"><i class="fas fa-store"></i> My listed services</button></div></div>
+      </div>
+      <div id="snm-search-panel">
+        <div class="snm-bar">
+          <input id="snm-q" type="search" placeholder="What do you need? e.g. plumber, shoe repair, chapati" autocomplete="off">
+          <select id="snm-cat">${categoryOptions(true)}</select>
+          <select id="snm-county">${countyOptions()}</select>
+          <div class="snm-loc">
+            <span id="snm-loc-tools" style="display:contents">
+              <button class="sh-btn ghost" type="button" id="snm-gps"><i class="fas fa-location-crosshairs"></i> Near me</button>
+              <button class="sh-btn ghost" type="button" id="snm-pick"><i class="fas fa-map-pin"></i> Choose on map</button>
+              <span id="snm-from"></span>
+              <select id="snm-radius" style="width:auto;flex:none"><option value="">Any distance</option><option value="2">Within 2 km</option><option value="5">Within 5 km</option><option value="10">Within 10 km</option><option value="25">Within 25 km</option><option value="50">Within 50 km</option></select>
+            </span>
+            <button class="sh-btn pri" type="button" id="snm-go" style="margin-left:auto"><i class="fas fa-search"></i> Search</button>
+          </div>
+        </div>
+        <div class="snm-count" id="snm-count"></div>
+        <div class="snm-grid" id="snm-grid"></div>
+      </div>
+      <div class="snm-divider"></div>`;
+    host.insertBefore(wrap, host.firstChild);
 
+    wrap.querySelectorAll(".snm-tabs button").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
     let t;
     $("snm-q").addEventListener("input", () => { clearTimeout(t); t = setTimeout(search, 450); });
     $("snm-q").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); search(); } });
@@ -136,7 +157,17 @@
     $("snm-go").onclick = search;
     $("snm-gps").onclick = useMyLocation;
     $("snm-pick").onclick = pickOnMap;
+    setMode(S.mode, true);
+  }
+
+  function setMode(mode, quiet) {
+    S.mode = mode;
+    document.querySelectorAll("#snm-wrap .snm-tabs button").forEach((b) => { const on = b.dataset.mode === mode; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); });
+    $("snm-list-panel").style.display = mode === "list" ? "" : "none";
+    $("snm-search-panel").style.display = mode === "list" ? "none" : "";
+    $("snm-loc-tools").style.display = mode === "near" ? "contents" : "none";
     renderFrom();
+    if (!quiet && mode !== "list") search();
   }
 
   function renderFrom() {
@@ -168,20 +199,29 @@
   }
 
   async function search() {
-    S.q = $("snm-q").value.trim(); S.category = $("snm-cat").value; S.county = $("snm-county").value; S.radiusKm = S.from ? $("snm-radius").value : "";
+    if (!$("snm-grid") || S.mode === "list") return;
+    const near = S.mode === "near";
+    S.q = $("snm-q").value.trim(); S.category = $("snm-cat").value; S.county = $("snm-county").value; S.radiusKm = near && S.from ? $("snm-radius").value : "";
+    const grid = $("snm-grid");
+    if (near && !S.from) {
+      $("snm-count").textContent = "";
+      grid.innerHTML = `<div class="snm-empty"><i class="fas fa-map-marker-alt" style="font-size:2rem;margin-bottom:10px;display:block;color:#e53935"></i>Where are you? Share your location to see the providers closest to you.<br><br>
+        <button class="sh-btn pri" onclick="document.getElementById('snm-gps').click()"><i class="fas fa-location-crosshairs"></i> Use my location</button>
+        <button class="sh-btn ghost" onclick="document.getElementById('snm-pick').click()"><i class="fas fa-map-pin"></i> Choose on map</button></div>`;
+      return;
+    }
     const p = new URLSearchParams();
     if (S.q) p.set("q", S.q);
     if (S.category !== "all") p.set("category", S.category);
     if (S.county !== "all") p.set("county", S.county);
-    if (S.from) { p.set("lat", S.from.lat); p.set("lng", S.from.lng); if (S.radiusKm) p.set("radiusKm", S.radiusKm); }
-    const grid = $("snm-grid");
+    if (near) { p.set("lat", S.from.lat); p.set("lng", S.from.lng); if (S.radiusKm) p.set("radiusKm", S.radiusKm); }
     grid.innerHTML = '<div class="snm-empty"><i class="fas fa-spinner fa-spin"></i> Finding services…</div>';
     const d = await api(`/listings?${p}`);
     if (!d.success) { grid.innerHTML = `<div class="snm-empty">${esc(d.message || "Could not load services")} <button class="sh-btn ghost" onclick="shNearSearch()">Try again</button></div>`; $("snm-count").textContent = ""; return; }
     S.list = d.listings || []; S.total = d.total || 0;
-    $("snm-count").textContent = S.total ? `${S.total} service${S.total > 1 ? "s" : ""} found${S.from ? ", nearest first" : ""}` : "";
+    $("snm-count").textContent = S.total ? `${S.total} service${S.total > 1 ? "s" : ""} found${near ? ", nearest first" : ", newest first"}` : "";
     grid.innerHTML = S.list.length ? S.list.map(card).join("")
-      : `<div class="snm-empty"><i class="fas fa-search" style="font-size:2rem;margin-bottom:10px;display:block"></i>No services match yet${S.radiusKm ? ` within ${S.radiusKm} km` : ""}.<br>Try another word, a wider distance or all services.<br><br>
+      : `<div class="snm-empty"><i class="fas fa-search" style="font-size:2rem;margin-bottom:10px;display:block"></i>No services match yet${S.radiusKm ? ` within ${S.radiusKm} km` : ""}.<br>Try another word${near ? ", a wider distance" : ""} or all service types.<br><br>
          <button class="sh-btn pri" onclick="shListService()"><i class="fas fa-plus"></i> Offer this service? List it free</button></div>`;
   }
   window.shNearSearch = search;
@@ -418,7 +458,7 @@
     btn.disabled = false; btn.innerHTML = old;
     $("snm-form-modal").classList.remove("active");
     notify(photoFail ? "Service saved, but some photos didn't upload. Edit the service to try again." : F.id ? "Your service is updated." : "Your service is live! Clients near you can now find and contact you.", photoFail ? "info" : "success");
-    if ($("services-near") && $("services-near").classList.contains("active")) search();
+    if ($("find-services") && $("find-services").classList.contains("active")) search();
     if ($("dashboard") && $("dashboard").classList.contains("active")) myServices();
   }
 
@@ -449,7 +489,7 @@
     const list = d.listings || [];
     panel.innerHTML = `<div class="sh-panel-head"><h2><i class="fas fa-store" style="color:var(--primary)"></i> My Services</h2>
         <button class="sh-btn pri" onclick="shListService()"><i class="fas fa-plus"></i> List a service</button></div>
-      <p style="color:var(--medium-gray);font-size:.9rem;margin:0 0 14px">Services you list appear in <b>Services Near Me</b>. Clients nearby call, WhatsApp or message you directly.</p>
+      <p style="color:var(--medium-gray);font-size:.9rem;margin:0 0 14px">Services you list appear in <b>Find Services</b>. Clients nearby call, WhatsApp or message you directly.</p>
       ${list.length ? list.map((l) => `<div class="snm-mine">
           <div class="snm-ph"><i class="fas fa-tools"></i>${l.photos && l.photos.length ? `<img src="${photoUrl(l, l.photos[0])}" alt="" onerror="this.remove()">` : ""}</div>
           <div style="flex:1;min-width:0"><div class="snm-cat">${esc(l.categoryLabel)}</div><h3>${esc(l.title)}</h3>
@@ -468,18 +508,6 @@
   /* ── Hook into the site (after the main page has set itself up) ── */
   function install() {
     buildSection();
-    // Nav link
-    const nav = document.querySelector(".nav-menu");
-    if (nav && !$("snm-nav")) {
-      const a = document.createElement("a");
-      a.href = "#"; a.className = "nav-link"; a.id = "snm-nav"; a.setAttribute("data-section", "services-near"); a.textContent = "Services Near Me";
-      const ref = nav.querySelector('[data-section="find-services"]');
-      nav.insertBefore(a, ref || null);
-      a.addEventListener("click", (e) => {
-        e.preventDefault(); showSection("services-near");
-        try { if (navMenu && navMenu.classList.contains("active")) toggleMobileMenu(); } catch (err) {}
-      });
-    }
     // Dashboard card
     const acts = document.querySelector("#dashboard .dashboard-actions");
     if (acts && !$("my-services-action")) {
@@ -494,8 +522,7 @@
     if (typeof orig === "function" && !orig.__snm) {
       const wrapped = function (id) {
         const r = orig.apply(this, arguments);
-        const link = $("snm-nav"); if (link) link.classList.toggle("active", id === "services-near");
-        if (id === "services-near") setTimeout(search, 50);
+        if (id === "find-services") setTimeout(search, 50);
         return r;
       };
       wrapped.__snm = true;
