@@ -653,5 +653,25 @@
       try { showSection = wrapped; } catch (e) {}
     }
   }
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", install); else install();
+  // Links from search results and shared pages: /?listing=ID, /?service=plumbing, /?list=1, /?post=1
+  function deepLinks() {
+    const q = new URLSearchParams(location.search);
+    const listing = q.get("listing"), service = q.get("service"), list = q.get("list"), post = q.get("post");
+    if (!listing && !service && !list && !post) return;
+    ["listing", "service", "list", "post"].forEach((k) => q.delete(k));
+    try { history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash); } catch (e) {}
+    setTimeout(() => { // give the saved sign-in a moment to load
+      if (service && $("snm-wrap")) {
+        const c = categoryList().find((x) => x.v === service);
+        S.mode = "all"; showSection("find-services"); setMode("all", true);
+        if (c && S.picker) S.picker.set({ v: c.v, t: c.t });
+        search();
+      }
+      if (listing) { if (!service) showSection("find-services"); window.shOpenListing(listing); }
+      if (list) { showSection("find-services"); setMode("list"); window.shListService(); }
+      if (post) { const m = $("post-job-modal"); if (me() && m) { showSection("dashboard"); m.classList.add("active"); } else requireSignIn("Sign in or create a free account, then post your job."); }
+    }, 1500);
+  }
+  function start() { install(); deepLinks(); }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
 })();

@@ -1,0 +1,32 @@
+# ServiceHub Kenya
+
+> ServiceHub Kenya (https://servicehub.co.ke) is a free online marketplace that connects people who need a service with service providers near them, across all 47 counties of Kenya. It covers formal and informal (jua kali) work: plumbers, electricians, mechanics, boda boda riders, barbers and salons, mama mbogas, food kiosks, caterers, cleaners, tutors, movers, photographers and many more. It is free for clients and providers, with no fees or commissions.
+
+ServiceHub Kenya is run by ServiceHub Kenya Limited, a product of Jatelo Technologies, based in Kisumu, Kenya.
+
+## How it works
+
+- **Find a provider near you:** open Find Services → Services near me. ServiceHub uses your location and lists providers nearest first (within 10 km by default), showing how far away each one is, their starting price and their area.
+- **Browse all services:** Find Services → All services, filtered by service type and county. The service filter understands everyday words such as "kinyozi" (barber), "fundi wa simu" (phone repair) and "mjengo" (construction work).
+- **Post a job and get quotes:** describe the job, location and budget; providers near you send quotes; you compare, accept one, and track the job to completion.
+- **Contact:** in-app chat, in-app voice and video calls, WhatsApp, Relay (Jatelo's own messaging app) or a normal phone call. Phone numbers are shown only to signed-in users.
+- **Payment:** clients pay the provider directly (cash, M-Pesa or bank). ServiceHub does not handle money and takes no commission.
+- **Offer a service:** anyone can list a service free: what they do, price, phone number and a map pin of where they work. A provider working from home can show only the approximate area (about 1 km).
+- **One account, two roles:** the same account can hire (client) and work (service provider).
+
+## Key pages
+
+- [Home](https://servicehub.co.ke/): overview, how it works, FAQ and the Android app
+- [All service types](https://servicehub.co.ke/services): directory of every service category with providers listed
+- [Service type page](https://servicehub.co.ke/services/plumbing): example category page; each lists live providers, prices and areas
+- [Android app](https://servicehub.co.ke/download/android): free download of the ServiceHub Kenya app (APK)
+- [Sitemap](https://servicehub.co.ke/sitemap.xml): every public page, including each provider's service page
+
+## Facts
+
+- Coverage: all 47 counties of Kenya
+- Price to use: free for clients and providers; no commission
+- Platforms: website (servicehub.co.ke) and Android app
+- Languages: English; common Swahili and Sheng service words are understood in search
+- Company: ServiceHub Kenya Limited, a product of Jatelo Technologies, Tom Mboya, Kisumu, Kenya
+- Contact: support@servicehub.co.ke, info@servicehub.co.ke, +254 724 090 067, WhatsApp +254 727 679 997

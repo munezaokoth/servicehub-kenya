@@ -18,8 +18,8 @@
   #shx-bar .shx-t{color:var(--medium-gray);margin-right:2px}
   #shx-bar a,#shx-bar button{display:inline-flex;align-items:center;gap:6px;border:0;border-radius:20px;padding:7px 13px;font:inherit;font-weight:600;font-size:.82rem;cursor:pointer;text-decoration:none;line-height:1}
   .shx-wa{background:#25d366;color:#fff}
-  .shx-relay{background:#0b3a9c;color:#fff}
-  .shx-relay .shx-r{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#fff;color:#0b3a9c;font-size:.68rem;font-weight:800}
+  .shx-relay{background:linear-gradient(135deg,#17a2cf,#0c7aa3);color:#fff}
+  .shx-relay img{width:18px;height:18px;border-radius:5px;box-shadow:0 0 0 1.5px rgba(255,255,255,.85)}
   #shx-bar .shx-none{color:var(--medium-gray)}`;
   document.head.appendChild(st);
 
@@ -61,7 +61,7 @@
     const text = encodeURIComponent(me ? `Hello ${first}, this is ${me} from ServiceHub Kenya.` : `Hello ${first}, I found you on ServiceHub Kenya.`);
     b.innerHTML = `<span class="shx-t">Also talk to ${esc(first)} on:</span>
       <a class="shx-wa" href="https://wa.me/${esc(c.phone)}?text=${text}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> WhatsApp</a>
-      <button type="button" class="shx-relay" onclick="shOpenRelay('${esc(convId)}')"><span class="shx-r">R</span> Relay</button>`;
+      <button type="button" class="shx-relay" onclick="shOpenRelay('${esc(convId)}')"><img src="/icons/relay.png" alt=""> Relay</button>`;
     b.classList.add("on");
   }
 

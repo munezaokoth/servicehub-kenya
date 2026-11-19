@@ -1,0 +1,46 @@
+# ServiceHub Kenya - https://servicehub.co.ke
+# Search engines and AI assistants are welcome to read our public pages.
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Allow: /api/listings/*/photos/
+
+# AI assistants and answer engines (explicitly allowed)
+User-agent: GPTBot
+Allow: /
+Disallow: /api/
+Disallow: /admin
+
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /api/
+Disallow: /admin
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /api/
+Disallow: /admin
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /api/
+Disallow: /admin
+
+User-agent: Claude-SearchBot
+Allow: /
+Disallow: /api/
+Disallow: /admin
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /api/
+Disallow: /admin
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+Sitemap: https://servicehub.co.ke/sitemap.xml

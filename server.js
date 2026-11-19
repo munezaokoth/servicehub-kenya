@@ -21,6 +21,7 @@ const userRoutes     = require("./routes/users");
 const callRoutes     = require("./routes/calls");
 const adminRoutes    = require("./routes/admin");
 const listingRoutes  = require("./routes/listings");
+const seoRoutes      = require("./routes/seo");
 const { turnProvider } = require("./utils/ice");
 
 const app = express();
@@ -84,6 +85,9 @@ app.use("/api", (req, res) => res.status(404).json({ success: false, message: `R
 // ── Android app download (always the newest build from GitHub Releases) ──
 const APK_URL = process.env.ANDROID_APK_URL || "https://github.com/munezaokoth/servicehub-kenya/releases/latest/download/ServiceHub-Kenya.apk";
 app.get(["/download/android", "/app", "/apk"], (req, res) => res.redirect(302, APK_URL));
+
+// ── Pages for search engines and AI assistants (sitemap, /services, /service/:id) ──
+app.use(seoRoutes);
 
 // ── Website (same origin as the API, so no CORS or URL mismatch) ──────────
 const PUBLIC_DIR = path.join(__dirname, "public");
