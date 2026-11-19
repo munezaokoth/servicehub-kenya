@@ -32,6 +32,10 @@
   const initials = (n) => String(n || "?").split(" ").filter(Boolean).map((x) => x[0]).join("").toUpperCase().slice(0, 2) || "?";
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const inApp = () => !!(window.Capacitor || document.documentElement.classList.contains("in-app"));
+  // Android app native helpers (ServiceHubNativePlugin.java)
+  const NATIVE = () => { const C = window.Capacitor; return C && C.isNativePlatform && C.isNativePlatform() && C.Plugins && C.Plugins.ServiceHubNative ? C.Plugins.ServiceHubNative : null; };
+  const nat = (fn, arg) => { const N = NATIVE(); if (N && typeof N[fn] === "function") { try { return Promise.resolve(N[fn](arg || {})).catch(() => null); } catch (e) {} } return Promise.resolve(null); };
+  let nativeRinging = false;
   const fmt = (sec) => { const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60; return (h ? h + ":" + String(m).padStart(2, "0") : String(m).padStart(2, "0")) + ":" + String(s).padStart(2, "0"); };
 
   /* ───────────────────────── sounds (generated, no files) ───────────────────────── */
@@ -49,7 +53,7 @@
     if (c && c.state === "running") unlocked = true;
     const ra = $("shc-remote-audio");
     if (ra && ra.srcObject && ra.paused) ra.play().then(hideTapForSound).catch(() => {});
-    if (S.incoming && !S.call && !toneTimer && !document.hidden) startRingtone();
+    if (S.incoming && !S.call && !toneTimer && !nativeRinging && !document.hidden) startRingtone();
   }
   ["pointerdown", "touchstart", "keydown", "click"].forEach((ev) => document.addEventListener(ev, unlockAudio, { capture: true, passive: true }));
 
@@ -65,6 +69,7 @@
     toneNodes.push(g);
   }
   function stopTones() {
+    if (nativeRinging) { nativeRinging = false; nat("stopRingtone"); }
     clearInterval(toneTimer); toneTimer = null;
     toneNodes.forEach((n) => { try { n.stop ? n.stop() : n.disconnect(); } catch (e) {} });
     toneNodes = [];
@@ -85,6 +90,7 @@
   }
   // Person being called hears this
   function startRingtone() {
+    if (NATIVE()) { stopTones(); nativeRinging = true; nat("startRingtone"); return; } // phone's own ringtone + vibration
     loopTone(3.2, (t) => {
       const notes = [1318.5, 1568, 1975.5, 1568, 1318.5, 1568, 1975.5, 2637];
       notes.forEach((f, i) => beep([f, f / 2], t + i * 0.15, 0.14, 0.35));
@@ -100,9 +106,10 @@
 
   /* ───────────────────────── screen awake + title flash ───────────────────────── */
   async function keepAwake() {
+    nat("setKeepScreenOn", { on: true });
     try { if ("wakeLock" in navigator && !S.wakeLock && !document.hidden) { S.wakeLock = await navigator.wakeLock.request("screen"); S.wakeLock.addEventListener("release", () => { S.wakeLock = null; }); } } catch (e) {}
   }
-  function releaseAwake() { try { S.wakeLock && S.wakeLock.release(); } catch (e) {} S.wakeLock = null; }
+  function releaseAwake() { nat("setKeepScreenOn", { on: false }); try { S.wakeLock && S.wakeLock.release(); } catch (e) {} S.wakeLock = null; }
   let titleTimer = null, oldTitle = document.title;
   function flashTitle(text) {
     stopFlash(); oldTitle = document.title; let on = false;
@@ -112,7 +119,7 @@
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) return;
     if (S.call || S.incoming) keepAwake();
-    if (S.incoming && !S.call) startRingtone();
+    if (S.incoming && !S.call) { closeSystemRing(S.incoming.callId); startRingtone(); }
   });
 
   /* ───────────────────────── UI ───────────────────────── */
@@ -240,6 +247,7 @@
     ["shc-remote-video", "shc-local-video", "shc-remote-audio"].forEach((id) => { const v = $(id); if (v) v.srcObject = null; });
     $("shc-mute").classList.remove("on"); $("shc-mute").innerHTML = '<i class="fas fa-microphone"></i>';
     $("shc-cam").classList.remove("on"); $("shc-cam").innerHTML = '<i class="fas fa-video"></i>';
+    $("shc-spk").classList.remove("on"); if (NATIVE()) $("shc-spk-lbl").textContent = "Speaker";
   }
   function showTapForSound() { const b = $("shc-tap"); if (b) b.style.display = "block"; }
   function hideTapForSound() { const b = $("shc-tap"); if (b) b.style.display = "none"; }
@@ -363,6 +371,11 @@
     $("shc-call").classList.remove("ringing", "ringing-in");
     S.seconds = 0; setStatus("00:00");
     clearInterval(S.timer);
+    if (NATIVE() && S.call) {
+      S.speaker = S.call.type === "video";
+      nat("setInCall", { active: true, speaker: S.speaker, video: S.call.type === "video" });
+      const b = $("shc-spk"); if (b) b.classList.toggle("on", S.speaker);
+    }
     S.timer = setInterval(() => { S.seconds++; if (S.pc && (S.pc.connectionState === "connected" || S.pc.iceConnectionState === "connected" || S.pc.iceConnectionState === "completed")) setStatus(fmt(S.seconds)); }, 1000);
     keepAwake();
   }
@@ -470,6 +483,7 @@
   }
 
   async function showSystemRing(d) {
+    if (NATIVE()) return; // the app's own notification handles background ringing
     try {
       if (!("serviceWorker" in navigator) || Notification.permission !== "granted") return;
       const reg = await navigator.serviceWorker.getRegistration("/");
@@ -483,6 +497,7 @@
     } catch (e) {}
   }
   async function closeSystemRing(callId) {
+    nat("cancelCallNotification", { callId });
     try {
       const reg = "serviceWorker" in navigator && (await navigator.serviceWorker.getRegistration("/"));
       if (reg) (await reg.getNotifications({ tag: "call-" + callId })).forEach((n) => n.close());
@@ -594,12 +609,21 @@
   let outputs = [], outIdx = 0;
   async function initSpeakerButton() {
     const cell = $("shc-spk-cell");
+    if (NATIVE()) { if (cell) cell.classList.remove("shc-hide"); return; } // real loudspeaker / earpiece switch in the app
     const ra = $("shc-remote-audio");
     if (!ra || typeof ra.setSinkId !== "function" || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) { if (cell) cell.classList.add("shc-hide"); return; }
     try { outputs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "audiooutput"); } catch (e) { outputs = []; }
     if (cell) cell.classList.toggle("shc-hide", outputs.length < 2);
   }
   async function toggleSpeaker() {
+    if (NATIVE()) {
+      if (!S.call) return;
+      S.speaker = !S.speaker;
+      await nat("setInCall", { active: true, speaker: S.speaker, video: S.call.type === "video" });
+      const b = $("shc-spk"); if (b) b.classList.toggle("on", S.speaker);
+      $("shc-spk-lbl").textContent = S.speaker ? "Speaker on" : "Speaker";
+      return;
+    }
     const ra = $("shc-remote-audio");
     try {
       outputs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "audiooutput");
@@ -637,6 +661,7 @@
   function finish(reason, delay, keepStatus) {
     const c = S.call;
     if (c) clearTimeout(c.ringGuard);
+    if (NATIVE()) { nat("setInCall", { active: false }); S.speaker = false; }
     clearInterval(S.timer); S.timer = null;
     clearTimeout(S.discTimer); S.discTimer = null;
     cleanupMedia();
@@ -692,6 +717,12 @@
   }, 700);
 
   async function unsubscribeDevice() {
+    if (NATIVE()) {
+      const t = nativeToken || ((await nat("getPushToken")) || {}).token;
+      if (t) fetch(`${api()}/calls/push/unsubscribe`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: "fcm:" + t }) }).catch(() => {});
+      nativeToken = null;
+      return;
+    }
     try {
       const reg = "serviceWorker" in navigator && (await navigator.serviceWorker.getRegistration("/"));
       const sub = reg && (await reg.pushManager.getSubscription());
@@ -706,7 +737,7 @@
   function b64ToU8(b64) { const p = "=".repeat((4 - (b64.length % 4)) % 4); const raw = atob((b64 + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from([...raw].map((c) => c.charCodeAt(0))); }
 
   async function registerSW() {
-    if (!("serviceWorker" in navigator)) return null;
+    if (!("serviceWorker" in navigator) || NATIVE()) return null;
     try { return await navigator.serviceWorker.register("/sw.js", { scope: "/" }); } catch (e) { return null; }
   }
 
@@ -741,7 +772,69 @@
     } catch (e) { if (fromClick) notify("Could not turn on call alerts on this device.", "error"); }
   }
 
+  /* ── Android app: native call alerts (FCM) ── */
+  let nativeToken = null, nativeRecheck = false;
+  async function registerNativeToken() {
+    const r = await nat("getPushToken");
+    if (!r || !r.token || !token()) return false;
+    nativeToken = r.token;
+    const res = await fetch(`${api()}/calls/push/subscribe-native`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token()}` }, body: JSON.stringify({ token: r.token, platform: "android" }) }).then((x) => x.json()).catch(() => null);
+    return !!(res && res.success);
+  }
+  function snoozed(key, days) { let t = 0; try { t = Number(localStorage.getItem(key) || 0); } catch (e) {} return Date.now() - t < days * 864e5; }
+  function alertBanner(text, yesLabel, onYes, key) {
+    injectUI();
+    const bar = $("shc-alerts");
+    bar.querySelector("div").textContent = text;
+    const y = $("shc-alerts-yes"); y.textContent = yesLabel;
+    y.onclick = () => { bar.classList.remove("show"); nativeRecheck = true; onYes(); };
+    $("shc-alerts-no").onclick = () => { bar.classList.remove("show"); try { localStorage.setItem(key, String(Date.now())); } catch (e) {} };
+    bar.classList.add("show");
+  }
+  async function setupNativeAlerts() {
+    if (!token()) return;
+    const st = await nat("alertStatus");
+    if (!st) return;
+    if (st.notifications) registerNativeToken();
+    if (!st.notifications) {
+      if (snoozed("sh_alerts_later", 3)) return;
+      alertBanner("Turn on call alerts so your phone rings when someone calls you on ServiceHub.", "Turn on", async () => {
+        const r = await nat("requestNotificationPermission");
+        if (r && r.notifications) { nativeRecheck = false; await registerNativeToken(); notify("Call alerts are on. Your phone will ring for ServiceHub calls.", "success"); setTimeout(setupNativeAlerts, 800); }
+        else { notify("Call alerts are off. Turn on notifications for ServiceHub in your phone settings.", "warning"); nat("openNotificationSettings"); }
+      }, "sh_alerts_later");
+      return;
+    }
+    if (!st.fullScreen) {
+      if (snoozed("sh_fs_later", 7)) return;
+      alertBanner("Allow ServiceHub to show calls on your lock screen, so incoming calls light up your screen like a normal phone call.", "Allow", () => nat("openFullScreenSettings"), "sh_fs_later");
+      return;
+    }
+    const strict = /xiaomi|redmi|poco|tecno|infinix|itel|oppo|realme|vivo|huawei|honor|oneplus|transsion/i.test(st.manufacturer || "");
+    if (strict && !st.batteryUnrestricted && !snoozed("sh_batt_later", 30)) {
+      alertBanner("Your phone may close ServiceHub in the background and you could miss calls. Set ServiceHub's battery use to \"No restrictions\".", "Open settings", () => nat("openBatterySettings"), "sh_batt_later");
+    }
+  }
+  function handleNativeAction(a) {
+    if (!a) return;
+    if (a.action === "open_chat") { openChat(a.conversationId, a.callerName); return; }
+    if (!a.callId) return;
+    if (S.incoming && S.incoming.callId === a.callId) { if (a.action === "accept") acceptCall(); return; }
+    S.autoAction = { callId: a.callId, action: a.action === "accept" ? "accept" : "open" };
+    const s = sock(); if (s && s.connected) s.emit("call_sync", {}, () => {});
+  }
+  (function initNative() {
+    const N = NATIVE();
+    if (!N || !N.addListener) return;
+    N.addListener("callAction", handleNativeAction);
+    N.addListener("callPush", () => { const s = sock(); if (s && s.connected && !S.incoming && !S.call) s.emit("call_sync", {}, () => {}); });
+    N.addListener("pushToken", () => { if (token()) registerNativeToken(); });
+    nat("getLaunchAction").then((r) => { if (r && r.action) handleNativeAction(r.action); });
+    document.addEventListener("visibilitychange", () => { if (!document.hidden && nativeRecheck) { nativeRecheck = false; setTimeout(setupNativeAlerts, 600); } });
+  })();
+
   function setupAlerts() {
+    if (NATIVE()) { injectUI(); setupNativeAlerts(); return; }
     injectUI();
     registerSW();
     if (!pushSupported() || !token()) return;

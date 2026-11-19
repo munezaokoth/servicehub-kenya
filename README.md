@@ -28,3 +28,11 @@ npm start              # http://localhost:5000
 - Job flow: quotes under each job, client accepts a quote, provider accepts the offer and sets a start date (job chat opens), completion by either side.
 - All queries work on a brand-new Firebase project without creating composite indexes.
 - `/health` reports exactly which setting is missing.
+
+## Android app (`mobile/`)
+Capacitor app that opens servicehub.co.ke, with native call ringing (Firebase Cloud Messaging, full-screen call over the lock screen, ringtone), native Google sign-in, Back-button handling and an offline screen.
+
+- Built by GitHub Actions (`.github/workflows/android-app.yml`) on every change to `mobile/`, or from Actions → **Android app** → Run workflow.
+- Each build is published as a GitHub Release: `ServiceHub-Kenya.apk` (direct install, linked from `https://servicehub.co.ke/download/android`) and `ServiceHub-Kenya.aab` (Google Play).
+- Needs `mobile/android/app/google-services.json` (Firebase → Android app `ke.co.servicehub.app`) and four repository secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
+- Keep the release keystore safe outside the repo: every future update must be signed with it.

@@ -1,0 +1,36 @@
+{
+  "appId": "ke.co.servicehub.app",
+  "appName": "ServiceHub Kenya",
+  "webDir": "www",
+  "server": {
+    "url": "https://servicehub.co.ke/?app=1",
+    "cleartext": false,
+    "androidScheme": "https",
+    "allowNavigation": ["servicehub.co.ke", "www.servicehub.co.ke", "*.servicehub.co.ke"],
+    "errorPath": "offline.html"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false,
+    "appendUserAgent": "ServiceHubApp/2.0"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1200,
+      "launchAutoHide": true,
+      "backgroundColor": "#0b2a5b",
+      "androidScaleType": "CENTER_INSIDE",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "overlaysWebView": false,
+      "style": "DARK",
+      "backgroundColor": "#0b2a5b"
+    },
+    "FirebaseAuthentication": {
+      "skipNativeAuth": true,
+      "providers": ["google.com"]
+    }
+  }
+}

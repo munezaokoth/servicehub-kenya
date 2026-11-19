@@ -3,6 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+      /* Inside the ServiceHub Android app? (app loads /?app=1 and has the Capacitor bridge) */
+      (function () {
+        try {
+          var inApp = /[?&]app=1\b/.test(location.search) || !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) || /ServiceHubApp\//.test(navigator.userAgent);
+          if (inApp) document.documentElement.classList.add('in-app');
+        } catch (e) {}
+      })();
+    </script>
+    <style>html.in-app .web-only{display:none!important}html:not(.in-app) .app-only{display:none!important}</style>
     <title>ServiceHub Kenya - On-Demand Professional Services Across Kenya</title>
     
     <!-- ServiceHub Kenya Limited official logo -->
@@ -16,7 +26,7 @@
     <!-- Firebase SDK for Google/Facebook Auth -->
     <script type="module">
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-      import { getAuth, GoogleAuthProvider, FacebookAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+      import { getAuth, GoogleAuthProvider, FacebookAuthProvider, signInWithPopup, signInWithCredential } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
       const firebaseConfig = {
         apiKey: "AIzaSyCOsw6zRuFKYItFOFQWgPeF6j2phaf3M04",
@@ -31,9 +41,24 @@
       const app = initializeApp(firebaseConfig);
       const firebaseAuth = getAuth(app);
 
+      // In the Android app Google blocks its sign-in page inside the app, so use the phone's own Google sign-in.
+      function nativeAuth() {
+        const C = window.Capacitor;
+        return C && C.isNativePlatform && C.isNativePlatform() && C.Plugins && C.Plugins.FirebaseAuthentication ? C.Plugins.FirebaseAuthentication : null;
+      }
+
       async function socialAuthFlow(provider) {
         try {
-          const result = await signInWithPopup(firebaseAuth, provider);
+          let result;
+          const FA = nativeAuth();
+          if (FA && provider.providerId === 'google.com') {
+            const r = await FA.signInWithGoogle({ scopes: ['email', 'profile'] });
+            const idToken = r && r.credential && r.credential.idToken;
+            if (!idToken) throw Object.assign(new Error('No Google token'), { code: 'auth/popup-closed-by-user' });
+            result = await signInWithCredential(firebaseAuth, GoogleAuthProvider.credential(idToken));
+          } else {
+            result = await signInWithPopup(firebaseAuth, provider);
+          }
           const idToken = await result.user.getIdToken();
           // Send ID token to backend to verify and create/login user
           const res = await fetch(`${window.API_BASE}/auth/social-login`, {
@@ -53,7 +78,7 @@
           }
         } catch (err) {
           console.error('Social auth error:', err);
-          if (err.code === 'auth/popup-closed-by-user') {
+          if (err.code === 'auth/popup-closed-by-user' || /cancel/i.test(String(err.message || err.code || ''))) {
             window.showNotification('Sign-in cancelled', 'info');
           } else if (err.code === 'auth/account-exists-with-different-credential') {
             window.showNotification('An account with this email already exists. Try signing in with email/password.', 'error');
@@ -2878,7 +2903,7 @@ z-index: 1;
                         <button class="social-auth-btn" onclick="handleGoogleAuth()">
                             <i class="fab fa-google" style="color: #DB4437;"></i> Google
                         </button>
-                        <button class="social-auth-btn" onclick="handleFacebookAuth()">
+                        <button class="social-auth-btn web-only" onclick="handleFacebookAuth()">
                             <i class="fab fa-facebook" style="color: #4267B2;"></i> Facebook
                         </button>
                     </div>
@@ -2943,7 +2968,7 @@ z-index: 1;
                         <button class="social-auth-btn" onclick="handleGoogleAuth()">
                             <i class="fab fa-google" style="color: #DB4437;"></i> Google
                         </button>
-                        <button class="social-auth-btn" onclick="handleFacebookAuth()">
+                        <button class="social-auth-btn web-only" onclick="handleFacebookAuth()">
                             <i class="fab fa-facebook" style="color: #4267B2;"></i> Facebook
                         </button>
                     </div>
@@ -4263,6 +4288,10 @@ z-index: 1;
                         <a href="#" class="social-icon" onclick="showNotification('Opening Instagram...', 'info')"><i class="fab fa-instagram"></i></a>
                         <a href="#" class="social-icon" onclick="showNotification('Opening LinkedIn...', 'info')"><i class="fab fa-linkedin-in"></i></a>
                     </div>
+                    <a href="/download/android" class="web-only sh-get-app" rel="noopener" style="display:inline-flex;align-items:center;gap:10px;margin-top:18px;background:#000;color:#fff;border-radius:12px;padding:10px 16px;text-decoration:none;border:1px solid rgba(255,255,255,.25)">
+                        <i class="fab fa-android" style="font-size:1.6rem;color:#3ddc84"></i>
+                        <span style="display:flex;flex-direction:column;line-height:1.15"><small style="font-size:.7rem;opacity:.8">Download the</small><b style="font-size:1rem">ServiceHub Android app</b></span>
+                    </a>
                 </div>
                 <div class="footer-column">
                     <h3>Quick Links</h3>
@@ -5917,6 +5946,7 @@ function renderJobs(jobs = []) {
     </script>
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     <script src="/dashboard-v2.js?v=1795030499"></script>
-    <script src="/calls-v2.js?v=2"></script>
+    <script src="/calls-v2.js?v=3"></script>
+    <script src="/app-shell.js?v=1"></script>
 </body>
 </html>

@@ -49,6 +49,11 @@ async function logCall(c, text) {
   } catch (e) { console.error("Call log error:", e.message); }
 }
 
+// Stops the ringing notification in the Android app (answered elsewhere / declined).
+function stopAppRinging(c) {
+  push.sendToUser(c.calleeId, { type: "call_cancel", callId: c.id }, { ttl: 60, urgency: "high", nativeOnly: true }).catch(() => {});
+}
+
 function cleanup(c) {
   clearTimeout(c.ringTimer); clearTimeout(c.graceTimer);
   calls.delete(c.id);
@@ -86,6 +91,7 @@ function declineFromPush(callId, token) {
   cleanup(c);
   if (c.callerSocket) io.to(c.callerSocket).emit("call_declined", { callId });
   io.to(`user:${c.calleeId}`).emit("call_cancelled", { callId, reason: "declined" });
+  stopAppRinging(c);
   logCall(c, `${c.type === "video" ? "📹" : "📞"} Declined ${label(c)}`);
   return true;
 }
@@ -151,6 +157,7 @@ function register(socket) {
     clearTimeout(c.ringTimer);
     io.to(c.callerSocket).emit("call_answered", { callId, answer: { type: answer.type, sdp: answer.sdp } });
     socket.to(`user:${uid}`).emit("call_handled_elsewhere", { callId });
+    stopAppRinging(c);
     ack({ ok: true });
   });
 
@@ -160,6 +167,7 @@ function register(socket) {
     cleanup(c);
     io.to(c.callerSocket).emit("call_declined", { callId });
     socket.to(`user:${uid}`).emit("call_handled_elsewhere", { callId });
+    stopAppRinging(c);
     logCall(c, `${c.type === "video" ? "📹" : "📞"} Declined ${label(c)}`);
   });
 

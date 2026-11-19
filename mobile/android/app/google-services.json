@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "131747836051",
+    "firebase_url": "https://servicehub-kenya-default-rtdb.firebaseio.com",
+    "project_id": "servicehub-kenya",
+    "storage_bucket": "servicehub-kenya.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:131747836051:android:33b71dee74b4f4da8b1d66",
+        "android_client_info": {
+          "package_name": "ke.co.servicehub.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "131747836051-vn3n9dvo5ihbsfi58efvp4tvoajsovh4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "ke.co.servicehub.app",
+            "certificate_hash": "eb23640fb8601c9bcae849146d80203de2d69739"
+          }
+        },
+        {
+          "client_id": "131747836051-mkrflnpsjqn3heohbdcqkbiqod2dupd1.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBcQuYGe1H0asw5pGjriFHsQ4G0gvHFtZg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "131747836051-mkrflnpsjqn3heohbdcqkbiqod2dupd1.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

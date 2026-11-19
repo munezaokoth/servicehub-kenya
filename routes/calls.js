@@ -28,6 +28,16 @@ router.post("/push/subscribe", verifyJWT, async (req, res) => {
   }
 });
 
+// Android app: Firebase Cloud Messaging token
+router.post("/push/subscribe-native", verifyJWT, async (req, res) => {
+  try {
+    await push.saveNativeToken(req.user.uid, req.body && req.body.token, req.body && req.body.platform, req.headers["user-agent"]);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(422).json({ success: false, message: "Could not turn on call alerts on this phone" });
+  }
+});
+
 router.post("/push/unsubscribe", async (req, res) => {
   await push.removeSubscription(req.body && req.body.endpoint);
   res.json({ success: true });

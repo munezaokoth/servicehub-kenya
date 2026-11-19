@@ -75,6 +75,10 @@ app.use("/api/calls",    callRoutes);
 app.get("/api", (req, res) => res.json({ name: "ServiceHub Kenya API", status: "running", version: "2.0.0" }));
 app.use("/api", (req, res) => res.status(404).json({ success: false, message: `Route ${req.method} ${req.originalUrl} not found` }));
 
+// ── Android app download (always the newest build from GitHub Releases) ──
+const APK_URL = process.env.ANDROID_APK_URL || "https://github.com/munezaokoth/servicehub-kenya/releases/latest/download/ServiceHub-Kenya.apk";
+app.get(["/download/android", "/app", "/apk"], (req, res) => res.redirect(302, APK_URL));
+
 // ── Website (same origin as the API, so no CORS or URL mismatch) ──────────
 const PUBLIC_DIR = path.join(__dirname, "public");
 // HTML/JS/CSS are always re-checked so every deploy reaches users immediately (no stale dashboard code)

@@ -45,20 +45,50 @@ async function saveSubscription(uid, sub, userAgent) {
   });
 }
 
+// Android app (Firebase Cloud Messaging token)
+async function saveNativeToken(uid, token, platform, userAgent) {
+  if (!token || typeof token !== "string" || token.length < 20) throw new Error("Invalid token");
+  await firebase.db.collection(SUBS).doc(subId(`fcm:${token}`)).set({
+    uid, kind: "fcm", token, platform: String(platform || "android").slice(0, 20),
+    userAgent: String(userAgent || "").slice(0, 200), updatedAt: new Date().toISOString(),
+  });
+}
+
+async function sendFcm(docRef, token, payload, ttl) {
+  try {
+    const data = {};
+    Object.entries(payload).forEach(([k, v]) => { if (v != null) data[k] = String(v); });
+    await firebase.admin.messaging().send({
+      token, data,
+      android: { priority: "high", ttl: Math.max(1, ttl) * 1000 },
+    });
+    return 1;
+  } catch (e) {
+    const code = e.code || (e.errorInfo && e.errorInfo.code) || "";
+    if (/registration-token-not-registered|invalid-registration-token|invalid-argument/.test(code)) await docRef.delete().catch(() => {});
+    else console.error("FCM send error:", code || e.message);
+    return 0;
+  }
+}
+
 async function removeSubscription(endpoint) {
   if (endpoint) await firebase.db.collection(SUBS).doc(subId(endpoint)).delete().catch(() => {});
 }
 
-// Returns the number of devices the push service accepted.
-async function sendToUser(uid, payload, { ttl = 60, urgency = "high", topic } = {}) {
-  if (!(await init())) return 0;
+// Sends to every device of a user: browsers (Web Push) and the Android app (FCM).
+// nativeOnly: only the app (used to stop ringing; browsers must show something for each push).
+// Returns the number of devices the push services accepted.
+async function sendToUser(uid, payload, { ttl = 60, urgency = "high", topic, nativeOnly = false } = {}) {
   const snap = await firebase.db.collection(SUBS).where("uid", "==", uid).get().catch(() => null);
   if (!snap || snap.empty) return 0;
+  const webReady = nativeOnly ? false : await init();
   const body = JSON.stringify(payload);
   const opts = { TTL: ttl, urgency };
   if (topic) opts.topic = String(topic).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 32);
   const results = await Promise.all(snap.docs.map(async (d) => {
     const s = d.data();
+    if (s.kind === "fcm") return sendFcm(d.ref, s.token, payload, ttl);
+    if (!webReady) return 0;
     try {
       await webpush.sendNotification({ endpoint: s.endpoint, keys: s.keys }, body, opts);
       return 1;
@@ -71,4 +101,4 @@ async function sendToUser(uid, payload, { ttl = 60, urgency = "high", topic } = 
   return results.reduce((a, b) => a + b, 0);
 }
 
-module.exports = { init, getPublicKey, saveSubscription, removeSubscription, sendToUser };
+module.exports = { init, getPublicKey, saveSubscription, saveNativeToken, removeSubscription, sendToUser };
