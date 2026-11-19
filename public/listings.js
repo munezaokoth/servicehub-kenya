@@ -28,21 +28,102 @@
     ["water-vendor", "Water Vendor"], ["charcoal-firewood", "Charcoal & Firewood"], ["phone-charging", "Phone Charging & Accessories"],
     ["casual-labour", "Casual Labour (Kibarua)"], ["house-help", "House Help & Nanny"], ["watchman", "Watchman"],
   ];
-  function categoryOptions(withAll) {
-    const seen = new Set(INFORMAL.map((c) => c[0]));
-    const src = $("category-filter");
-    const more = src ? Array.from(src.options).filter((o) => o.value && o.value !== "all" && !seen.has(o.value)).map((o) => [o.value, o.textContent.trim()]) : [];
-    const opt = ([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`;
-    return `${withAll ? '<option value="all">All services</option>' : '<option value="">Choose the type of service…</option>'}
-      <optgroup label="Everyday & informal services">${INFORMAL.map(opt).join("")}</optgroup>
-      <optgroup label="More services">${more.map(opt).join("")}</optgroup>
-      <option value="other">Other service</option>`;
-  }
   function countyOptions(first) {
     const src = $("county-filter");
     let html = src ? src.innerHTML : '<option value="all">All Counties</option>';
     if (first) html = html.replace(/<option value="all"[^>]*>[^<]*<\/option>/, `<option value="">${first}</option>`);
     return html;
+  }
+  /* ── Service-type filter: type to find the service you need / offer from the list of all services ── */
+  const KEYWORDS = {
+    plumbing: "fundi wa maji pipes taps leaking toilet sink", electrical: "stima wiring sockets electrician lights", mechanics: "garage car repair fundi wa gari engine",
+    "boda-boda": "motorbike piki piki rider delivery transport", "mama-mboga": "vegetables sukuma fruits groceries market", "food-kiosk": "chapati chips food hotel lunch breakfast mandazi",
+    barber: "haircut kinyozi shave", salon: "hair braiding plaiting weave nails", "shoe-repair": "cobbler shoes shoe shine", "jua-kali": "welding metal gates fundi",
+    "tyre-repair": "puncture tyres wheels", "car-wash": "cleaning car wash", "electronics-repair": "tv radio phone fundi electronics", "casual-labour": "kibarua labourer mjengo",
+    "house-help": "maid nanny housegirl domestic", watchman: "security guard askari", "water-vendor": "water maji", "hand-cart": "mkokoteni carry goods",
+    "house-cleaning": "cleaner cleaning home", laundry: "washing clothes dhobi", catering: "food events cooking chef", "mobile-phone-repair": "phone screen fundi wa simu",
+    carpentry: "furniture wood fundi wa mbao doors", masonry: "building construction mjengo fundi", "house-painting": "painter paint", tailoring: "fundi cherehani clothes sewing",
+    "gas-delivery": "cooking gas lpg", "parcel-delivery": "courier deliveries", transport: "lorry pickup moving", movers: "moving house relocation", "car-hire": "rent car",
+  };
+  function categoryList() {
+    const seen = new Set(INFORMAL.map((c) => c[0]));
+    const src = $("category-filter");
+    const more = src ? Array.from(src.options).filter((o) => o.value && o.value !== "all" && !seen.has(o.value)).map((o) => [o.value, o.textContent.trim()]) : [];
+    return [...INFORMAL.map(([v, t]) => ({ v, t, g: "Everyday & informal services" })), ...more.map(([v, t]) => ({ v, t, g: "More services" }))]
+      .map((c) => ({ ...c, k: `${c.t} ${c.v.replace(/-/g, " ")} ${KEYWORDS[c.v] || ""}`.toLowerCase() }));
+  }
+  const OTHER = { v: "other", t: "Other service", g: "", k: "other" };
+
+  /* host: element to fill. opts: { mode: "browse"|"offer", placeholder, value:{v,t}|null, onPick(item|null), onText(text) } */
+  function makePicker(host, opts) {
+    host.className = "snp";
+    host.innerHTML = `<i class="fas fa-search snp-ic"></i><input class="snp-in" type="text" enterkeyhint="search" autocomplete="off" placeholder="${esc(opts.placeholder)}" role="combobox" aria-expanded="false" aria-autocomplete="list">
+      <button type="button" class="snp-x" aria-label="Clear">&times;</button><div class="snp-list" role="listbox"></div>`;
+    const input = host.querySelector(".snp-in"), list = host.querySelector(".snp-list"), x = host.querySelector(".snp-x");
+    const all = categoryList();
+    const P = { picked: opts.value || null, rows: [], hi: -1 };
+    const sync = () => { x.style.display = input.value ? "" : "none"; host.classList.toggle("picked", !!P.picked); };
+    if (P.picked) input.value = P.picked.t;
+    sync();
+
+    function matches(q) {
+      if (!q) return all;
+      const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+      return all.filter((c) => words.every((w) => c.k.includes(w)))
+        .sort((a, b) => (b.t.toLowerCase().startsWith(words[0]) ? 1 : 0) - (a.t.toLowerCase().startsWith(words[0]) ? 1 : 0));
+    }
+    function render() {
+      const q = P.picked && input.value === P.picked.t ? "" : input.value.trim();
+      const found = matches(q);
+      P.rows = [];
+      let html = "";
+      if (opts.mode === "browse") {
+        if (q) { P.rows.push({ kw: q }); html += `<div class="snp-row snp-kw" data-i="0"><i class="fas fa-search"></i> Search all services for “${esc(q)}”</div>`; }
+        else { P.rows.push({ v: "all", t: "All services" }); html += `<div class="snp-row" data-i="0"><i class="fas fa-th-large"></i> All services</div>`; }
+      }
+      let group = null;
+      found.forEach((c) => {
+        if (!q && c.g !== group) { group = c.g; html += `<div class="snp-group">${esc(group)}</div>`; }
+        html += `<div class="snp-row ${P.picked && P.picked.v === c.v ? "on" : ""}" data-i="${P.rows.length}">${esc(c.t)}</div>`;
+        P.rows.push(c);
+      });
+      if (q && !found.length) html += `<div class="snp-none">No service type matches “${esc(q)}”.</div>`;
+      if (opts.mode === "offer") { html += `<div class="snp-row" data-i="${P.rows.length}"><i class="fas fa-ellipsis-h"></i> Other service</div>`; P.rows.push(OTHER); }
+      list.innerHTML = html;
+      P.hi = q ? 0 : -1; highlight();
+    }
+    function highlight() {
+      list.querySelectorAll(".snp-row").forEach((r) => r.classList.toggle("hi", Number(r.dataset.i) === P.hi));
+      const h = list.querySelector(".snp-row.hi"); if (h) h.scrollIntoView({ block: "nearest" });
+    }
+    const open = () => { render(); host.classList.add("open"); input.setAttribute("aria-expanded", "true"); };
+    const close = () => { host.classList.remove("open"); input.setAttribute("aria-expanded", "false"); };
+    function choose(row) {
+      if (!row) return;
+      if (row.kw != null) { P.picked = null; input.value = row.kw; close(); sync(); opts.onText && opts.onText(row.kw); return; }
+      if (row.v === "all") { P.picked = null; input.value = ""; close(); sync(); opts.onPick && opts.onPick(null); return; }
+      P.picked = { v: row.v, t: row.t }; input.value = row.t; close(); sync(); input.blur();
+      opts.onPick && opts.onPick(P.picked);
+    }
+    input.addEventListener("focus", () => { input.select(); open(); });
+    input.addEventListener("input", () => { if (P.picked && input.value !== P.picked.t) P.picked = null; sync(); open(); opts.onType && opts.onType(input.value.trim()); });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowDown") { e.preventDefault(); if (!host.classList.contains("open")) open(); P.hi = Math.min(P.rows.length - 1, P.hi + 1); highlight(); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); P.hi = Math.max(0, P.hi - 1); highlight(); }
+      else if (e.key === "Enter") { e.preventDefault(); if (host.classList.contains("open") && P.hi >= 0) choose(P.rows[P.hi]); else if (opts.mode === "browse") { close(); opts.onText && opts.onText(input.value.trim()); } }
+      else if (e.key === "Escape") close();
+    });
+    list.addEventListener("mousedown", (e) => e.preventDefault()); // keep focus while choosing
+    list.addEventListener("click", (e) => { const r = e.target.closest(".snp-row"); if (r) choose(P.rows[Number(r.dataset.i)]); });
+    x.addEventListener("click", () => { P.picked = null; input.value = ""; sync(); if (opts.mode === "browse") { close(); opts.onPick && opts.onPick(null); } else { input.focus(); } });
+    document.addEventListener("click", (e) => { if (!host.contains(e.target)) close(); });
+    return {
+      get picked() { return P.picked; },
+      get text() { return P.picked ? "" : input.value.trim(); },
+      set(item) { P.picked = item; input.value = item ? item.t : ""; sync(); },
+      // In the form: if what was typed is exactly a service name, accept it
+      resolve() { if (P.picked) return P.picked; const t = input.value.trim().toLowerCase(); const m = all.find((c) => c.t.toLowerCase() === t); if (m) { P.picked = { v: m.v, t: m.t }; } return P.picked; },
+    };
   }
   const subcounties = (county) => { try { return (subCountyMap && subCountyMap[county]) || []; } catch (e) { return []; } };
 
@@ -56,7 +137,7 @@
   .snm-listpanel h3{margin:0 0 6px;color:var(--primary)}.snm-listpanel p{margin:0 0 14px;color:var(--medium-gray);line-height:1.5}
   .snm-listicon{width:64px;height:64px;border-radius:16px;background:#fff4e6;color:#f28a12;display:flex;align-items:center;justify-content:center;font-size:1.8rem;flex:none}
   .snm-divider{height:1px;background:var(--light-gray);margin:34px 0 30px}
-  .snm-bar{background:var(--white);border:1px solid var(--light-gray);border-radius:14px;padding:14px;display:grid;grid-template-columns:2fr 1.4fr 1.2fr;gap:10px}
+  .snm-bar{background:var(--white);border:1px solid var(--light-gray);border-radius:14px;padding:14px;display:grid;grid-template-columns:2fr 1fr;gap:10px}
   .snm-bar .snm-loc{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .snm-bar input,.snm-bar select,.snm-form input,.snm-form select,.snm-form textarea{width:100%;padding:11px 12px;border:1.5px solid var(--light-gray);border-radius:10px;font:inherit;font-size:.92rem;background:var(--white);color:var(--dark)}
   .snm-chip{display:inline-flex;align-items:center;gap:6px;background:#e3f2fd;color:#0d47a1;border-radius:20px;padding:6px 10px;font-size:.82rem;font-weight:600;max-width:100%}
@@ -75,6 +156,19 @@
   .snm-price{font-weight:700;color:var(--primary);font-size:.92rem;margin-top:auto}
   .snm-who{display:flex;align-items:center;gap:8px;font-size:.84rem;font-weight:600;color:var(--dark-gray)}
   .snm-badge{display:inline-block;background:#e8f5e9;color:#2e7d32;border-radius:6px;padding:2px 7px;font-size:.72rem;font-weight:700}
+  .snp{position:relative}
+  .snp .snp-ic{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--medium-gray);pointer-events:none}
+  .snp .snp-in{padding-left:38px!important;padding-right:36px!important}
+  .snp.picked .snp-in{border-color:var(--primary);font-weight:600;color:var(--primary)}
+  .snp .snp-x{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:none;font-size:1.3rem;color:var(--medium-gray);cursor:pointer;line-height:1}
+  .snp .snp-list{display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);background:var(--white);border:1px solid var(--light-gray);border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.15);max-height:320px;overflow-y:auto;z-index:50;padding:6px}
+  .snp.open .snp-list{display:block}
+  .snp-row{padding:10px 12px;border-radius:8px;cursor:pointer;font-size:.92rem;color:var(--dark);display:flex;gap:8px;align-items:center}
+  .snp-row:hover,.snp-row.hi{background:#e3f2fd;color:#0d47a1}.snp-row.on{font-weight:700;color:var(--primary)}
+  .snp-kw{color:var(--primary);font-weight:600}
+  .snp-group{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#f28a12;padding:10px 12px 4px}
+  .snp-none{padding:10px 12px;color:var(--medium-gray);font-size:.88rem}
+  body.dark-theme .snp-row:hover,body.dark-theme .snp-row.hi{background:#1e3a5f;color:#fff}
   .snm-empty{grid-column:1/-1;text-align:center;padding:40px 16px;color:var(--medium-gray);background:var(--white);border:1px dashed var(--light-gray);border-radius:14px}
   #snm-modal .modal-content,#snm-form-modal .modal-content{max-width:620px;width:100%;padding:0;max-height:calc(100dvh - 24px);display:flex;flex-direction:column}
   .snm-mh{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--light-gray)}
@@ -99,7 +193,7 @@
   .snm-mine{background:var(--white);border:1px solid var(--light-gray);border-radius:14px;padding:14px;margin-bottom:12px;display:flex;gap:12px;align-items:flex-start}
   .snm-mine .snm-ph{width:90px;height:90px;border-radius:10px;flex:none;font-size:1.6rem}
   .snm-mine h3{margin:0 0 4px;font-size:1rem}
-  @media (max-width:720px){.snm-listpanel{flex-direction:column}.snm-tabs button{flex:none}.snm-bar{grid-template-columns:1fr}.snm-2{grid-template-columns:1fr}.snm-mine{flex-direction:column}.snm-mine .snm-ph{width:100%;height:140px}}`;
+  @media (max-width:720px){.snm-listpanel{flex-direction:column}.snm-tabs{overflow:visible;gap:4px;padding:4px}.snm-tabs button{flex:1 1 0;min-width:0;flex-direction:column;gap:3px;padding:8px 4px;font-size:.78rem;white-space:normal;text-align:center;line-height:1.2}.snm-tabs button i{font-size:1.05rem}.snm-bar{grid-template-columns:1fr}.snm-2{grid-template-columns:1fr}.snm-mine{flex-direction:column}.snm-mine .snm-ph{width:100%;height:140px}}`;
   document.head.appendChild(st);
 
   /* ── State ── */
@@ -130,8 +224,7 @@
       </div>
       <div id="snm-search-panel">
         <div class="snm-bar">
-          <input id="snm-q" type="search" placeholder="What do you need? e.g. plumber, shoe repair, chapati" autocomplete="off">
-          <select id="snm-cat">${categoryOptions(true)}</select>
+          <div id="snm-pick-type"></div>
           <select id="snm-county">${countyOptions()}</select>
           <div class="snm-loc">
             <span id="snm-loc-tools" style="display:contents">
@@ -151,9 +244,12 @@
 
     wrap.querySelectorAll(".snm-tabs button").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
     let t;
-    $("snm-q").addEventListener("input", () => { clearTimeout(t); t = setTimeout(search, 450); });
-    $("snm-q").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); search(); } });
-    ["snm-cat", "snm-county", "snm-radius"].forEach((id) => $(id).addEventListener("change", search));
+    S.picker = makePicker($("snm-pick-type"), {
+      mode: "browse", placeholder: "Search a service, e.g. plumber, boda boda, salon",
+      onPick: () => search(), onText: () => search(),
+      onType: (txt) => { clearTimeout(t); if (!txt) t = setTimeout(search, 300); },
+    });
+    ["snm-county", "snm-radius"].forEach((id) => $(id).addEventListener("change", search));
     $("snm-go").onclick = search;
     $("snm-gps").onclick = useMyLocation;
     $("snm-pick").onclick = pickOnMap;
@@ -173,7 +269,7 @@
   function renderFrom() {
     const box = $("snm-from"); if (!box) return;
     box.innerHTML = S.from ? `<span class="snm-chip"><i class="fas fa-map-marker-alt"></i><span>Near: ${esc(S.from.label || `${S.from.lat.toFixed(4)}, ${S.from.lng.toFixed(4)}`)}</span><button type="button" aria-label="Clear location" onclick="shNearClear()">&times;</button></span>`
-      : '<small style="color:var(--medium-gray)">Set your location to see the nearest providers first</small>';
+      : "";
     $("snm-radius").disabled = !S.from;
   }
   window.shNearClear = () => { S.from = null; saveFrom(); $("snm-radius").value = ""; renderFrom(); search(); };
@@ -201,13 +297,11 @@
   async function search() {
     if (!$("snm-grid") || S.mode === "list") return;
     const near = S.mode === "near";
-    S.q = $("snm-q").value.trim(); S.category = $("snm-cat").value; S.county = $("snm-county").value; S.radiusKm = near && S.from ? $("snm-radius").value : "";
+    S.q = S.picker.text; S.category = S.picker.picked ? S.picker.picked.v : "all"; S.county = $("snm-county").value; S.radiusKm = near && S.from ? $("snm-radius").value : "";
     const grid = $("snm-grid");
     if (near && !S.from) {
       $("snm-count").textContent = "";
-      grid.innerHTML = `<div class="snm-empty"><i class="fas fa-map-marker-alt" style="font-size:2rem;margin-bottom:10px;display:block;color:#e53935"></i>Where are you? Share your location to see the providers closest to you.<br><br>
-        <button class="sh-btn pri" onclick="document.getElementById('snm-gps').click()"><i class="fas fa-location-crosshairs"></i> Use my location</button>
-        <button class="sh-btn ghost" onclick="document.getElementById('snm-pick').click()"><i class="fas fa-map-pin"></i> Choose on map</button></div>`;
+      grid.innerHTML = `<div class="snm-empty"><i class="fas fa-map-marker-alt" style="font-size:2rem;margin-bottom:10px;display:block;color:#e53935"></i>Where are you? Tap <b>Near me</b> or <b>Choose on map</b> above to see the providers closest to you.</div>`;
       return;
     }
     const p = new URLSearchParams();
@@ -362,7 +456,7 @@
         <button class="modal-close" type="button" aria-label="Close" onclick="this.closest('.modal').classList.remove('active')">&times;</button></div>
       <div class="snm-mb snm-form">
         <small>It's free. Clients near you will find you, then call, WhatsApp or message you.</small>
-        <label>What service do you offer?</label><select id="snf-cat">${categoryOptions(false)}</select>
+        <label>What service do you offer?</label><div id="snf-cat"></div>
         <label>Name of your service</label><input id="snf-title" maxlength="80" placeholder="e.g. Shoe repair at Kondele stage, Boda boda in Ruiru">
         <label>Describe what you do</label><textarea id="snf-desc" rows="4" maxlength="1000" placeholder="What you offer, your experience, what makes you good…"></textarea>
         <div class="snm-2"><div><label>Starting price (KES)</label><input id="snf-price" type="number" min="0" inputmode="numeric" placeholder="e.g. 200 (optional)"></div>
@@ -387,9 +481,9 @@
     v("snf-county").onchange = () => fillSubs("");
     v("snf-mobile").onchange = () => { v("snf-radius-box").style.display = v("snf-mobile").checked ? "" : "none"; };
     v("snf-save").onclick = save;
+    F.picker = makePicker(v("snf-cat"), { mode: "offer", placeholder: "Type your service, e.g. barber, plumber, boda boda", value: l ? { v: l.category, t: l.categoryLabel } : null });
     if (l) {
-      const cat = v("snf-cat"); if (!Array.from(cat.options).some((o) => o.value === l.category)) cat.insertAdjacentHTML("beforeend", `<option value="${esc(l.category)}">${esc(l.categoryLabel)}</option>`);
-      cat.value = l.category; v("snf-title").value = l.title; v("snf-desc").value = l.description;
+      v("snf-title").value = l.title; v("snf-desc").value = l.description;
       v("snf-price").value = l.priceFrom != null ? l.priceFrom : ""; v("snf-unit").value = l.priceUnit || "negotiable";
       v("snf-phone").value = l.phone ? "0" + String(l.phone).replace(/^254/, "") : ""; v("snf-wa").checked = !!l.whatsapp;
       v("snf-exact").checked = l.showExact !== false; v("snf-county").value = l.county || ""; fillSubs(l.subcounty || "");
@@ -433,9 +527,9 @@
 
   async function save() {
     const v = (id) => $(id);
-    const catSel = v("snf-cat");
+    const cat = F.picker.resolve();
     const body = {
-      category: catSel.value, categoryLabel: catSel.selectedOptions[0] ? catSel.selectedOptions[0].textContent.trim() : "",
+      category: cat ? cat.v : "", categoryLabel: cat ? cat.t : "",
       title: v("snf-title").value, description: v("snf-desc").value,
       priceFrom: v("snf-price").value, priceUnit: v("snf-unit").value,
       phone: v("snf-phone").value, whatsapp: v("snf-wa").checked,
@@ -443,7 +537,7 @@
       county: v("snf-county").value, subcounty: v("snf-sub").value, area: v("snf-area").value,
       mobile: v("snf-mobile").checked, serviceRadiusKm: v("snf-mobile").checked ? v("snf-radius").value : null, availability: v("snf-avail").value,
     };
-    if (!body.category) { notify("Choose the type of service you offer", "error"); return; }
+    if (!body.category) { notify("Type your service and choose it from the list (or choose Other service)", "error"); return; }
     if (!body.location) { notify("Pin where you work on the map so clients near you can find you", "error"); return; }
     if (!body.county) { notify("Choose your county", "error"); return; }
     const btn = v("snf-save"); btn.disabled = true; const old = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
@@ -508,19 +602,6 @@
   /* ── Hook into the site (after the main page has set itself up) ── */
   function install() {
     buildSection();
-    // Menu link straight to "Services near me" (kept alongside the Find Services tabs)
-    const nav = document.querySelector(".nav-menu");
-    if (nav && !$("snm-nav")) {
-      const a = document.createElement("a");
-      a.href = "#"; a.className = "nav-link"; a.id = "snm-nav"; a.textContent = "Services Near Me";
-      nav.insertBefore(a, nav.querySelector('[data-section="find-services"]') || null);
-      a.addEventListener("click", (e) => {
-        e.preventDefault();
-        S.mode = "near"; S.viaNav = true;
-        showSection("find-services");
-        try { if (navMenu && navMenu.classList.contains("active")) toggleMobileMenu(); } catch (err) {}
-      });
-    }
     // Dashboard card
     const acts = document.querySelector("#dashboard .dashboard-actions");
     if (acts && !$("my-services-action")) {
@@ -535,14 +616,7 @@
     if (typeof orig === "function" && !orig.__snm) {
       const wrapped = function (id) {
         const r = orig.apply(this, arguments);
-        const viaNav = !!S.viaNav; S.viaNav = false;
-        const link = $("snm-nav");
-        if (link) {
-          link.classList.toggle("active", id === "find-services" && viaNav);
-          const fs = document.querySelector('.nav-link[data-section="find-services"]');
-          if (fs && id === "find-services" && viaNav) fs.classList.remove("active");
-        }
-        if (id === "find-services") { if (viaNav && $("snm-wrap")) setMode("near", true); setTimeout(search, 50); }
+        if (id === "find-services") setTimeout(search, 50);
         return r;
       };
       wrapped.__snm = true;
