@@ -692,7 +692,7 @@
 
         .services-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
             gap: 25px;
         }
 
@@ -1108,7 +1108,7 @@ z-index: 1;
 
         .jobs-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr));
             gap: 30px;
         }
 
@@ -1224,7 +1224,7 @@ z-index: 1;
 
         .job-detail-images {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
             gap: 20px;
             margin-bottom: 25px;
         }
@@ -1487,7 +1487,7 @@ z-index: 1;
 
         .dashboard-stats {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(min(270px, 100%), 1fr));
             gap: 25px;
             margin-bottom: 40px;
         }
@@ -1563,7 +1563,7 @@ z-index: 1;
 
         .dashboard-actions {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
             gap: 25px;
             margin-bottom: 40px;
         }
@@ -2026,7 +2026,7 @@ z-index: 1;
 
         .footer-content {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
             gap: 50px;
             margin-bottom: 50px;
         }
@@ -2290,7 +2290,7 @@ z-index: 1;
             }
             
             .services-grid {
-                grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+                grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
             }
             
             .contact-grid {
@@ -2394,7 +2394,7 @@ z-index: 1;
             }
             
             .services-grid {
-                grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+                grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
             }
             
             .social-auth {
@@ -2586,7 +2586,7 @@ z-index: 1;
 
         .careers-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(min(350px, 100%), 1fr));
             gap: 30px;
             margin-bottom: 60px;
         }
@@ -2710,7 +2710,7 @@ z-index: 1;
 
         .benefits-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
             gap: 25px;
         }
 
@@ -2821,6 +2821,7 @@ z-index: 1;
             margin-bottom: 1rem;
         }
     </style>
+    <link rel="stylesheet" href="/responsive.css?v=1">
 </head>
 <body>
     <!-- Loading Overlay -->
@@ -5986,5 +5987,6 @@ function renderJobs(jobs = []) {
     <script src="/dashboard-v2.js?v=1795030499"></script>
     <script src="/calls-v2.js?v=3"></script>
     <script src="/app-shell.js?v=1"></script>
+    <script src="/responsive.js?v=1"></script>
 </body>
 </html>

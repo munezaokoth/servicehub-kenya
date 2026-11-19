@@ -1,0 +1,130 @@
+/* ServiceHub Kenya - responsive layer
+   Makes every page fit regular phones, flip phones (incl. small cover screens), foldables
+   (folded and unfolded), tablets and desktops. Loaded after the main styles so it wins.
+   - The top menu switches to the ☰ drawer whenever the full menu doesn't fit
+     (always below 1180px, and above that if responsive.js measures that it doesn't fit).
+   - The hero text never runs over the photo.
+   - Grids, cards, forms and tables shrink to the screen instead of being cut off. */
+
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+html, body { max-width: 100%; overflow-x: clip; }
+img, video, iframe { max-width: 100%; }
+img { height: auto; }
+input, select, textarea, button { max-width: 100%; }
+table { max-width: 100%; }
+pre, code { white-space: pre-wrap; overflow-wrap: anywhere; }
+h1, h2, h3, h4, p, li, a, span, td, th, label { overflow-wrap: break-word; }
+
+.container { padding-left: clamp(12px, 4vw, 20px); padding-right: clamp(12px, 4vw, 20px); }
+
+/* ── Header ─────────────────────────────────────────────────────────── */
+.logo { min-width: 0; }
+.logo-text { min-width: 0; }
+.logo-main { font-size: clamp(1.05rem, 1rem + 1.2vw, 1.6rem); white-space: nowrap; }
+.logo-motto { font-size: clamp(0.62rem, 0.55rem + 0.5vw, 0.85rem); }
+
+/* Drawer menu: same look as the original phone menu */
+@media (max-width: 1180px) {
+  .mobile-toggle { display: block; flex-shrink: 0; padding: 6px 4px 6px 12px; cursor: pointer; }
+  .nav-menu {
+    position: fixed; top: var(--sh-header-h, 80px); left: -100%;
+    width: min(85%, 380px); height: calc(100vh - var(--sh-header-h, 80px)); height: calc(100dvh - var(--sh-header-h, 80px));
+    background: var(--white); flex-direction: column; padding: 28px clamp(20px, 6vw, 40px);
+    box-shadow: var(--shadow-lg); transition: var(--transition); z-index: 999;
+    justify-content: flex-start; margin: 0; overflow-y: auto; flex: none;
+  }
+  .nav-menu.active { left: 0; }
+  .nav-link { padding: 15px 0; text-align: left; width: 100%; flex: none; }
+  .nav-link:after { left: 0; transform: none; }
+  .nav-link:hover:after, .nav-link.active:after { width: 30%; }
+}
+html.nav-collapsed .mobile-toggle { display: block; flex-shrink: 0; padding: 6px 4px 6px 12px; cursor: pointer; }
+html.nav-collapsed .nav-menu {
+  position: fixed; top: var(--sh-header-h, 80px); left: -100%;
+  width: min(85%, 380px); height: calc(100dvh - var(--sh-header-h, 80px));
+  background: var(--white); flex-direction: column; padding: 28px 40px;
+  box-shadow: var(--shadow-lg); transition: var(--transition); z-index: 999;
+  justify-content: flex-start; margin: 0; overflow-y: auto; flex: none;
+}
+html.nav-collapsed .nav-menu.active { left: 0; }
+html.nav-collapsed .nav-link { padding: 15px 0; text-align: left; width: 100%; flex: none; }
+html.nav-collapsed .nav-link:after { left: 0; transform: none; }
+html.nav-collapsed .nav-link:hover:after, html.nav-collapsed .nav-link.active:after { width: 30%; }
+
+/* Dim the page behind the open drawer */
+.sh-nav-backdrop { position: fixed; inset: var(--sh-header-h, 80px) 0 0 0; background: rgba(0, 0, 0, .35); z-index: 998; opacity: 0; pointer-events: none; transition: opacity .25s; }
+.sh-nav-backdrop.show { opacity: 1; pointer-events: auto; }
+
+/* Content starts right below the real header height (it changes with screen width) */
+.app-section, .auth-section { scroll-margin-top: var(--sh-header-h, 80px); }
+@media (max-width: 1180px) {
+  .app-section { padding-top: var(--sh-header-h, 80px); }
+  .auth-section { padding-top: calc(var(--sh-header-h, 80px) + 28px); }
+  .app-section > .section:first-child { padding-top: 32px; }
+}
+
+/* ── Hero ───────────────────────────────────────────────────────────── */
+.hero-content { max-width: min(750px, 52%); }
+.hero h1 { font-size: clamp(1.8rem, 1.1rem + 3vw, 3.8rem); }
+.hero p { font-size: clamp(1rem, 0.9rem + 0.5vw, 1.3rem); }
+@media (max-width: 1180px) {
+  .hero { padding: 56px 0 72px; text-align: center; }
+  .hero-content { max-width: 720px; margin: 0 auto; }
+  .hero-image { display: none; }
+  .hero-buttons { justify-content: center; }
+}
+@media (max-width: 420px) {
+  .hero { padding: 36px 0 48px; }
+  .hero-buttons { flex-direction: column; align-items: stretch; gap: 12px; }
+  .hero-buttons .btn { width: 100%; justify-content: center; }
+}
+
+/* ── Sections, titles, cards ─────────────────────────────────────────── */
+.section-title h2 { font-size: clamp(1.6rem, 1.1rem + 2.2vw, 2.8rem); }
+@media (max-width: 576px) {
+  .section { padding: 56px 0; }
+  .contact-info, .email-container, .form-container { padding: 20px; }
+  .auth-container { margin: 0; }
+  .auth-form { padding: 24px 16px; }
+  .stat-card { padding: 20px; }
+}
+@media (max-width: 360px) {
+  /* Flip / fold cover screens and very small phones */
+  .logo { gap: 8px; }
+  .logo-img { width: 38px; height: 38px; }
+  .logo-motto { display: none; }
+  .section { padding: 44px 0; }
+  .service-card, .job-card, .stat-card, .action-card { padding: 16px; }
+  .btn { padding-left: 14px; padding-right: 14px; }
+  .modal-content { width: calc(100% - 16px) !important; margin: 8px auto; }
+  .modal-body, .modal-header, .modal-footer { padding-left: 14px; padding-right: 14px; }
+}
+
+/* Grids never force a card wider than the screen */
+.services-grid, .jobs-grid, .dashboard-stats, .dashboard-actions, .footer-content, .contact-grid { width: 100%; }
+@media (max-width: 992px) { .contact-grid { grid-template-columns: 1fr; } }
+
+/* Modals fit any screen height (foldables in landscape, small phones) */
+.modal { padding: 12px; }
+.modal-content { max-height: calc(100dvh - 24px); overflow-y: auto; }
+@media (max-width: 700px) { .modal-content { width: 100%; } }
+
+/* Wide tables scroll inside their box instead of pushing the page sideways */
+.table-responsive, .sh-scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* Tablets and unfolded foldables: comfortable two-column dashboard and chat */
+@media (min-width: 700px) and (max-width: 1180px) {
+  .dashboard-stats { grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 16px; }
+  .dashboard-actions { grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); }
+}
+
+/* Landscape phones / short screens: keep the hero and drawer usable */
+@media (max-height: 520px) and (orientation: landscape) {
+  .hero { padding-top: 24px; padding-bottom: 32px; }
+  .nav-link { padding: 10px 0; }
+}
+
+/* Contact page: long emails / phone numbers wrap instead of widening the card */
+.contact-grid > * { min-width: 0; }
+.contact-method, .contact-method > * { min-width: 0; }
+.contact-method a, .contact-method p, .contact-method span { overflow-wrap: anywhere; }
