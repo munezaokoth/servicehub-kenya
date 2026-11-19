@@ -73,4 +73,30 @@ router.post("/conversations/:id/messages", verifyJWT, async (req, res) => {
   }
 });
 
+// GET /api/chat/conversations/:id/contact
+// The other person's phone number, shared only with someone in the same conversation,
+// so they can also talk on WhatsApp or Relay.
+function phoneDigits(p) {
+  let d = String(p || "").replace(/[^\d]/g, "");
+  if (/^0[17]\d{8}$/.test(d)) d = "254" + d.slice(1);
+  if (/^[17]\d{8}$/.test(d)) d = "254" + d;
+  return /^\d{9,15}$/.test(d) ? d : null;
+}
+router.get("/conversations/:id/contact", verifyJWT, async (req, res) => {
+  try {
+    const convDoc = await firebase.db.collection(firebase.COLLECTIONS.CONVERSATIONS).doc(req.params.id).get();
+    if (!convDoc.exists) return res.status(404).json({ success: false, message: "Conversation not found" });
+    const conv = convDoc.data();
+    if (!(conv.participants || []).includes(req.user.uid)) return res.status(403).json({ success: false, message: "Not authorised" });
+    const otherId = conv.participants.find((p) => p !== req.user.uid);
+    const other = otherId ? await firebase.db.collection(firebase.COLLECTIONS.USERS).doc(otherId).get() : null;
+    if (!other || !other.exists) return res.status(404).json({ success: false, message: "User not found" });
+    const u = other.data();
+    return res.json({ success: true, contact: { uid: otherId, name: u.name || (conv.participantNames || {})[otherId] || "ServiceHub user", phone: phoneDigits(u.phone) } });
+  } catch (error) {
+    console.error("Conversation contact error:", error);
+    return res.status(500).json({ success: false, message: "Could not load contact details" });
+  }
+});
+
 module.exports = router;
