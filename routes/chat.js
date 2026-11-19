@@ -43,17 +43,22 @@ router.get("/conversations/:id/messages", verifyJWT, async (req, res) => {
     if (!convDoc.exists) return res.status(404).json({ success: false, message: "Conversation not found" });
     if (!convDoc.data().participants.includes(req.user.uid)) return res.status(403).json({ success: false, message: "Not authorised" });
     const snap = await firebase.db.collection(firebase.COLLECTIONS.MESSAGES).where("conversationId", "==", req.params.id).get();
-    const messages = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || ""))).slice(-200);
+    const messages = snap.docs.map((d) => publicMsg({ id: d.id, ...d.data() }))
+      .filter((m) => !(Array.isArray(m.hiddenFor) && m.hiddenFor.includes(req.user.uid)))
+      .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || ""))).slice(-200)
+      .map(({ hiddenFor, ...m }) => m);
     convDoc.ref.update({ [`unreadCount.${req.user.uid}`]: 0 }).catch(() => {});
     return res.json({ success: true, messages });
   } catch (error) {
+    console.error("Get messages error:", error);
     return res.status(500).json({ success: false, message: "Could not fetch messages" });
   }
 });
 
 router.post("/conversations/:id/messages", verifyJWT, async (req, res) => {
-  const { text } = req.body;
+  const { text, replyTo } = req.body;
   if (!text || !text.trim()) return res.status(422).json({ success: false, message: "Message text is required" });
+  if (text.length > 4000) return res.status(422).json({ success: false, message: "Message is too long" });
   try {
     const convDoc = await firebase.db.collection(firebase.COLLECTIONS.CONVERSATIONS).doc(req.params.id).get();
     if (!convDoc.exists) return res.status(404).json({ success: false, message: "Conversation not found" });
@@ -62,6 +67,14 @@ router.post("/conversations/:id/messages", verifyJWT, async (req, res) => {
     const msgId = uuidv4();
     const now = new Date().toISOString();
     const msgData = { id: msgId, conversationId: req.params.id, senderId: req.user.uid, senderName: req.user.name, text: text.trim(), read: false, createdAt: now };
+    // Reply to an earlier message in the same conversation (a short quote is kept with the reply)
+    if (replyTo) {
+      const orig = await firebase.db.collection(firebase.COLLECTIONS.MESSAGES).doc(String(replyTo)).get();
+      if (orig.exists && orig.data().conversationId === req.params.id) {
+        const o = orig.data();
+        msgData.replyTo = { id: o.id, senderId: o.senderId, senderName: o.senderName || "", text: o.deleted ? "" : String(o.text || "").slice(0, 160), deleted: !!o.deleted, type: o.type || null };
+      }
+    }
     await firebase.db.collection(firebase.COLLECTIONS.MESSAGES).doc(msgId).set(msgData);
     const otherUserId = conv.participants.find((p) => p !== req.user.uid);
     await convDoc.ref.update({ lastMessage: text.trim().slice(0, 100), lastMessageAt: now, lastMessageSenderId: req.user.uid, [`unreadCount.${otherUserId}`]: admin.firestore.FieldValue.increment(1) });
@@ -70,6 +83,77 @@ router.post("/conversations/:id/messages", verifyJWT, async (req, res) => {
   } catch (error) {
     console.error("Send message error:", error);
     return res.status(500).json({ success: false, message: "Could not send message" });
+  }
+});
+
+
+// ── Edit and delete messages ───────────────────────────────────────────────
+const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000; // your own messages can be edited for 24 hours
+function publicMsg(m) {
+  if (m.deleted) { const { text, edits, ...rest } = m; return { ...rest, text: "" }; }
+  const { edits, ...rest } = m; return rest; // earlier versions stay on the server only
+}
+async function loadOwnMessage(req, res) {
+  const convDoc = await firebase.db.collection(firebase.COLLECTIONS.CONVERSATIONS).doc(req.params.id).get();
+  if (!convDoc.exists) { res.status(404).json({ success: false, message: "Conversation not found" }); return null; }
+  const conv = convDoc.data();
+  if (!(conv.participants || []).includes(req.user.uid)) { res.status(403).json({ success: false, message: "Not authorised" }); return null; }
+  const ref = firebase.db.collection(firebase.COLLECTIONS.MESSAGES).doc(req.params.msgId);
+  const doc = await ref.get();
+  if (!doc.exists || doc.data().conversationId !== req.params.id) { res.status(404).json({ success: false, message: "Message not found" }); return null; }
+  return { convDoc, conv, ref, msg: doc.data() };
+}
+// If the edited/deleted message is the newest one, keep the conversation list preview right
+async function refreshPreview(convDoc, conv, msg, newText) {
+  if (conv.lastMessageAt === msg.createdAt) await convDoc.ref.update({ lastMessage: String(newText).slice(0, 100) }).catch(() => {});
+}
+
+// PUT /api/chat/conversations/:id/messages/:msgId  { text }
+router.put("/conversations/:id/messages/:msgId", verifyJWT, async (req, res) => {
+  const text = String((req.body && req.body.text) || "").trim();
+  if (!text) return res.status(422).json({ success: false, message: "Message text is required" });
+  if (text.length > 4000) return res.status(422).json({ success: false, message: "Message is too long" });
+  try {
+    const it = await loadOwnMessage(req, res); if (!it) return;
+    const m = it.msg;
+    if (m.senderId !== req.user.uid) return res.status(403).json({ success: false, message: "You can only edit your own messages" });
+    if (m.system || m.type === "call" || m.deleted) return res.status(422).json({ success: false, message: "This message can't be edited" });
+    if (Date.now() - new Date(m.createdAt).getTime() > EDIT_WINDOW_MS) return res.status(422).json({ success: false, message: "Messages can only be edited within 24 hours of sending" });
+    if (text === m.text) return res.json({ success: true, message: publicMsg(m) });
+    const now = new Date().toISOString();
+    const updates = { text, edited: true, editedAt: now, edits: admin.firestore.FieldValue.arrayUnion({ text: m.text, at: m.editedAt || m.createdAt }) };
+    await it.ref.update(updates);
+    const out = publicMsg({ ...m, text, edited: true, editedAt: now });
+    await refreshPreview(it.convDoc, it.conv, m, text);
+    if (global.io) global.io.to(`conversation:${req.params.id}`).emit("message_updated", out);
+    return res.json({ success: true, message: out });
+  } catch (error) {
+    console.error("Edit message error:", error);
+    return res.status(500).json({ success: false, message: "Could not edit the message" });
+  }
+});
+
+// DELETE /api/chat/conversations/:id/messages/:msgId?for=everyone|me
+router.delete("/conversations/:id/messages/:msgId", verifyJWT, async (req, res) => {
+  const forEveryone = req.query.for === "everyone";
+  try {
+    const it = await loadOwnMessage(req, res); if (!it) return;
+    const m = it.msg;
+    if (!forEveryone) {
+      await it.ref.update({ hiddenFor: admin.firestore.FieldValue.arrayUnion(req.user.uid) });
+      return res.json({ success: true, hiddenFor: "me", id: m.id });
+    }
+    if (m.senderId !== req.user.uid) return res.status(403).json({ success: false, message: "You can only delete your own messages for everyone" });
+    if (m.system) return res.status(422).json({ success: false, message: "This message can't be deleted" });
+    const now = new Date().toISOString();
+    await it.ref.update({ deleted: true, deletedAt: now, text: "", edits: admin.firestore.FieldValue.delete() });
+    const out = publicMsg({ ...m, deleted: true, deletedAt: now });
+    await refreshPreview(it.convDoc, it.conv, m, "This message was deleted");
+    if (global.io) global.io.to(`conversation:${req.params.id}`).emit("message_updated", out);
+    return res.json({ success: true, message: out });
+  } catch (error) {
+    console.error("Delete message error:", error);
+    return res.status(500).json({ success: false, message: "Could not delete the message" });
   }
 });
 
