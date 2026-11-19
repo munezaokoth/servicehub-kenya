@@ -87,7 +87,8 @@ router.get("/my/posted", verifyJWT, async (req, res) => {
 router.get("/my/assigned", verifyJWT, async (req, res) => {
   try {
     const snap = await firebase.db.collection(firebase.COLLECTIONS.JOBS).where("assignedProviderId", "==", req.user.uid).get();
-    const jobs = snap.docs.map((d) => { const { timeline, ...rest } = d.data(); return { id: d.id, ...rest }; }).filter((j) => j.status !== "completed" && j.status !== "cancelled").sort(byDate("updatedAt"));
+    const all = req.query.include === "all";
+    const jobs = snap.docs.map((d) => { const { timeline, ...rest } = d.data(); return { id: d.id, ...rest }; }).filter((j) => all ? j.status !== "cancelled" : (j.status !== "completed" && j.status !== "cancelled")).sort(byDate("updatedAt"));
     return res.json({ success: true, jobs });
   } catch (error) {
     console.error("Assigned jobs error:", error);

@@ -64,6 +64,7 @@
           <input id="shm-q" type="search" placeholder="Search a place, estate or landmark" autocomplete="off">
           <button type="button" class="sh-btn ghost" id="shm-search"><i class="fas fa-search"></i></button>
         </div>
+        <div id="shm-msg" style="display:none;margin:0 16px 8px;padding:10px 12px;border-radius:10px;font-size:.85rem;line-height:1.4"></div>
         <div class="shm-results" id="shm-results"></div>
         <div class="shm-hint">Tap the map or drag the red pin to the exact spot.</div>
       </div>
@@ -147,19 +148,51 @@
     } catch (e) { box.innerHTML = '<div style="font-size:.85rem;color:#c62828">Search is not available right now. Drag the pin instead.</div>'; }
   }
 
-  function gps() {
-    if (!navigator.geolocation) { notify("Location is not available on this device", "error"); return; }
-    const btn = document.getElementById("shm-gps"); btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Finding you…';
-    navigator.geolocation.getCurrentPosition((pos) => {
-      btn.disabled = false; btn.innerHTML = '<i class="fas fa-location-crosshairs"></i> Use my current location';
+  function say(html, kind) {
+    const el = document.getElementById("shm-msg");
+    if (!el) return;
+    el.style.display = html ? "" : "none";
+    el.style.background = kind === "error" ? "#fdecea" : "#e8f1fd";
+    el.style.color = kind === "error" ? "#8a1c14" : "#0b2a5b";
+    el.innerHTML = html || "";
+  }
+  const inApp = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  function deniedHelp() {
+    return inApp()
+      ? 'Location is blocked for the ServiceHub app. Open your phone <b>Settings → Apps → ServiceHub Kenya → Permissions → Location → Allow</b>, then tap <b>Use my current location</b> again. You can also search the place or drag the pin.'
+      : 'Location is blocked for servicehub.co.ke. Tap the <b>lock / settings icon</b> next to the web address → <b>Permissions</b> (or Site settings) → <b>Location → Allow</b>, then try again. Make sure your phone\'s Location (GPS) is switched on. You can also search the place or drag the pin.';
+  }
+
+  async function gps() {
+    if (!navigator.geolocation) { say("This device can't share its location. Search the place or drag the pin.", "error"); return; }
+    try {
+      if (navigator.permissions && !inApp()) {
+        const st = await navigator.permissions.query({ name: "geolocation" });
+        if (st.state === "denied") { say(deniedHelp(), "error"); return; }
+      }
+    } catch (e) {}
+    const btn = document.getElementById("shm-gps");
+    const reset = () => { btn.disabled = false; btn.innerHTML = '<i class="fas fa-location-crosshairs"></i> Use my current location'; };
+    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Finding you…';
+    say("Getting your location… If your phone asks, tap <b>Allow</b>.");
+    const ok = (pos) => {
+      reset();
       const { latitude: lat, longitude: lng, accuracy } = pos.coords;
       setPin(lat, lng, null, true, accuracy);
       map.setView([lat, lng], accuracy > 500 ? 15 : 17);
-      if (accuracy > 200) notify(`Your phone's location is accurate to about ${Math.round(accuracy)} m. Drag the pin to the exact spot if needed.`, "info");
-    }, (err) => {
-      btn.disabled = false; btn.innerHTML = '<i class="fas fa-location-crosshairs"></i> Use my current location';
-      notify(err.code === 1 ? "Location permission was denied. Allow location for ServiceHub, or search / drag the pin." : "Could not get your location. Search for the place or drag the pin.", "warning");
-    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+      say(accuracy > 150 ? `Pinned to within about ${Math.round(accuracy)} m. Drag the pin to the exact gate or building if needed.` : "Pinned at your current location. Drag the pin if it's slightly off.");
+    };
+    const fail = (err, tried) => {
+      if (err && err.code === 1) { reset(); say(deniedHelp(), "error"); return; }
+      if (!tried) {
+        // GPS can be slow indoors: try again with network location
+        navigator.geolocation.getCurrentPosition(ok, (e2) => fail(e2, true), { enableHighAccuracy: false, timeout: 20000, maximumAge: 120000 });
+        return;
+      }
+      reset();
+      say("Couldn't get your location. Switch on your phone's Location (GPS), move near a window, and try again. Or search the place / drag the pin.", "error");
+    };
+    navigator.geolocation.getCurrentPosition(ok, (e) => fail(e, false), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
   }
 
   /* Open the picker. opts: { location, county, title, onSave(location|null), allowRemove } */
@@ -176,6 +209,7 @@
     m.querySelector("#shm-search").onclick = search;
     const q = m.querySelector("#shm-q"); q.value = ""; q.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); search(); } };
     m.querySelector("#shm-results").innerHTML = "";
+    say("");
     if (marker) { marker.remove(); marker = null; } if (circle) { circle.remove(); circle = null; }
     current = null;
     if (opts.location && isFinite(opts.location.lat)) {

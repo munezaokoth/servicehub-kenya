@@ -161,20 +161,26 @@ async function loadMyJobs(opts = {}) {
   renderMyJobs();
 }
 
+const SH_JOB_VIEWS = {
+  active: { label: "Active", test: (j) => j.status !== "completed" && j.status !== "cancelled", empty: "You have no active jobs. Post a job to start receiving quotes from service providers." },
+  open: { label: "Open", test: (j) => j.status === "open", empty: "No open jobs. Jobs waiting for quotes appear here." },
+  progress: { label: "In progress", test: (j) => ["awaiting-provider", "in-progress", "pending-completion"].includes(j.status), empty: "No jobs in progress. When you accept a quote, the job shows here." },
+  completed: { label: "Completed", test: (j) => j.status === "completed", empty: "No completed jobs yet. Jobs you mark as completed appear here, visible only to you." },
+  all: { label: "All", test: (j) => j.status !== "cancelled", empty: "You haven't posted any jobs yet." },
+};
 function renderMyJobs() {
   const panel = shPanel();
-  const active = shMyJobs.filter((j) => j.status !== "completed");
-  const done = shMyJobs.filter((j) => j.status === "completed");
-  const list = shJobsTab === "completed" ? done : active;
+  if (!SH_JOB_VIEWS[shJobsTab]) shJobsTab = "active";
+  const view = SH_JOB_VIEWS[shJobsTab];
+  const list = shMyJobs.filter(view.test);
+  const active = shMyJobs.filter(SH_JOB_VIEWS.active.test);
   const newQuotes = active.reduce((n, j) => n + (j.quotes || []).filter((q) => q.status === "pending").length, 0);
+  const tab = (key) => `<button class="sh-tab ${shJobsTab === key ? "on" : ""}" onclick="shJobsTab='${key}';renderMyJobs()">${SH_JOB_VIEWS[key].label} (${shMyJobs.filter(SH_JOB_VIEWS[key].test).length})${key === "active" && newQuotes ? ` · ${newQuotes} new quote${newQuotes > 1 ? "s" : ""}` : ""}</button>`;
   panel.innerHTML = `
     <div class="sh-panel-head"><h2><i class="fas fa-tasks" style="color:var(--primary)"></i> My Jobs</h2>
       <button class="sh-btn pri" onclick="document.getElementById('post-job-modal').classList.add('active')"><i class="fas fa-plus"></i> Post a Job</button></div>
-    <div class="sh-tabs">
-      <button class="sh-tab ${shJobsTab === "active" ? "on" : ""}" onclick="shJobsTab='active';renderMyJobs()">Active (${active.length})${newQuotes ? ` · ${newQuotes} new quote${newQuotes > 1 ? "s" : ""}` : ""}</button>
-      <button class="sh-tab ${shJobsTab === "completed" ? "on" : ""}" onclick="shJobsTab='completed';renderMyJobs()">Completed (${done.length})</button>
-    </div>
-    ${list.length ? list.map(shJobCard).join("") : `<div class="sh-job"><div class="sh-loading">${shJobsTab === "completed" ? "No completed jobs yet. Jobs you mark as completed appear here, visible only to you." : "You have no active jobs. Post a job to start receiving quotes from service providers."}</div></div>`}`;
+    <div class="sh-tabs" style="flex-wrap:wrap">${["active", "open", "progress", "completed", "all"].map(tab).join("")}</div>
+    ${list.length ? list.map(shJobCard).join("") : `<div class="sh-job"><div class="sh-loading">${view.empty}</div></div>`}`;
 }
 
 function shJobCard(job) {
@@ -289,15 +295,34 @@ async function cancelJob(jobId) {
 function loadJobQuotes(jobId) { loadMyJobs().then(() => { const el = document.getElementById("job-" + jobId); if (el) el.scrollIntoView({ behavior: "smooth" }); }); }
 
 /* ---------- PROVIDER: job offers + assigned jobs ---------- */
+let shAssignedView = "current"; // current | progress | completed
 async function loadMyAssignedJobs(opts = {}) {
   if (!requireLogin()) return;
+  if (opts.view) shAssignedView = opts.view;
   shGoDashboard();
   const panel = shPanel();
   panel.innerHTML = `<div class="sh-loading"><i class="fas fa-spinner fa-spin"></i> Loading your jobs...</div>`;
   if (!opts.quiet) panel.scrollIntoView({ behavior: "smooth", block: "start" });
-  const data = await shApi("/jobs/my/assigned").catch(() => ({ success: false }));
+  const data = await shApi("/jobs/my/assigned?include=all").catch(() => ({ success: false }));
   if (!data.success) { panel.innerHTML = `<div class="sh-loading">Could not load your jobs. <button class="sh-btn ghost" onclick="loadMyAssignedJobs()">Try again</button></div>`; return; }
-  const jobs = data.jobs || [];
+  const allJobs = data.jobs || [];
+  const completedJobs = allJobs.filter((j) => j.status === "completed");
+  const tabs = `<div class="sh-tabs" style="flex-wrap:wrap">
+      <button class="sh-tab ${shAssignedView === "current" ? "on" : ""}" onclick="loadMyAssignedJobs({view:'current',quiet:true})">Current (${allJobs.length - completedJobs.length})</button>
+      <button class="sh-tab ${shAssignedView === "progress" ? "on" : ""}" onclick="loadMyAssignedJobs({view:'progress',quiet:true})">In progress (${allJobs.filter((j) => ["in-progress", "pending-completion"].includes(j.status)).length})</button>
+      <button class="sh-tab ${shAssignedView === "completed" ? "on" : ""}" onclick="loadMyAssignedJobs({view:'completed',quiet:true})">Completed (${completedJobs.length})</button>
+      <button class="sh-tab" onclick="loadMyQuotes()">My Quotes</button></div>`;
+  if (shAssignedView === "completed") {
+    window.shAssignedJobs = completedJobs;
+    panel.innerHTML = `<div class="sh-panel-head"><h2><i class="fas fa-check-circle" style="color:#2e7d32"></i> Jobs Completed</h2>
+        <button class="sh-btn pri" onclick="showSection('find-services')"><i class="fas fa-search"></i> Find Jobs</button></div>${tabs}
+      ${completedJobs.map((job) => `<div class="sh-job"><div class="sh-job-top"><div><h3>${shEsc(job.title)}</h3><div class="sh-meta"><span><i class="fas fa-map-marker-alt"></i> ${shEsc(job.county)}${job.subcounty ? ", " + shEsc(job.subcounty) : ""}</span>
+        <span><i class="fas fa-money-bill-wave"></i> ${shKES(job.acceptedAmount || job.budgetMin)}</span><span><i class="fas fa-user"></i> ${shEsc(job.clientName || "Client")}</span>${job.completedAt ? `<span><i class="far fa-calendar-check"></i> ${shDate(job.completedAt)}</span>` : ""}</div></div>${shChip(SH_STATUS, job.status)}</div>
+        <div class="sh-actions"><button class="sh-btn ghost" onclick="openTrack('${job.id}')"><i class="fas fa-route"></i> Job history</button>
+        ${job.conversationId ? `<button class="sh-btn ghost" onclick="openJobChat('${job.conversationId}','${shEsc(job.clientName || "Client").replace(/'/g, "")}')"><i class="fas fa-comments"></i> Chat</button>` : ""}</div></div>`).join("") || `<div class="sh-job"><div class="sh-loading">No completed jobs yet. Jobs you finish appear here.</div></div>`}`;
+    return;
+  }
+  const jobs = shAssignedView === "progress" ? allJobs.filter((j) => ["in-progress", "pending-completion"].includes(j.status)) : allJobs.filter((j) => j.status !== "completed");
   window.shAssignedJobs = jobs;
   const mapBtn = (job) => job.location ? `<button class="sh-btn ghost" onclick="shViewJobLocation('${job.id}','assigned')"><i class="fas fa-map-marker-alt" style="color:#e53935"></i> Map &amp; directions</button>` : "";
   const offers = jobs.filter((j) => j.status === "awaiting-provider" || (j.acceptedQuoteId && !j.providerAcceptedAt && j.status !== "in-progress" && j.status !== "pending-completion"));
@@ -307,6 +332,7 @@ async function loadMyAssignedJobs(opts = {}) {
         <span><i class="fas fa-money-bill-wave"></i> ${shKES(job.acceptedAmount || job.budgetMin)}</span><span><i class="fas fa-user"></i> ${shEsc(job.clientName || "Client")}</span></div>`;
   panel.innerHTML = `<div class="sh-panel-head"><h2><i class="fas fa-briefcase" style="color:var(--primary)"></i> My Jobs</h2>
       <button class="sh-btn pri" onclick="showSection('find-services')"><i class="fas fa-search"></i> Find Jobs</button></div>
+    ${tabs}
     ${offers.length ? `<div class="sh-assigned" style="margin:0 0 14px;background:#f3e5f5;color:#4a148c;font-weight:600"><i class="fas fa-bell"></i> You have ${offers.length} new job offer${offers.length > 1 ? "s" : ""}. Accept to start the job.</div>` : ""}
     ${offers.map((job) => `<div class="sh-job" style="border:2px solid #8e24aa"><div class="sh-job-top"><div><h3>${shEsc(job.title)}</h3>${meta(job)}</div>${shChip({ "awaiting-provider": ["New job offer", "#6a1b9a", "#f3e5f5"] }, "awaiting-provider")}</div>
         ${job.description ? `<div class="sh-empty" style="padding:0 20px 10px">${shEsc(job.description).slice(0, 220)}</div>` : ""}
@@ -956,4 +982,60 @@ async function becomeProvider() {
   window.updateAuthUI = wrapped;
   try { updateAuthUI = wrapped; } catch (e) {}
   if (currentUser && currentUser.loggedIn) renderRoleSwitch();
+})();
+
+
+/* ---------- PROVIDER: quotes I've sent ---------- */
+let shQuotesView = "all";
+const SH_QUOTE_STATUS = { pending: ["Waiting for client", "#1565c0", "#e3f2fd"], accepted: ["Accepted", "#2e7d32", "#e8f5e9"], rejected: ["Not selected", "#c62828", "#ffebee"], withdrawn: ["Withdrawn", "#616161", "#f5f5f5"] };
+async function loadMyQuotes(view) {
+  if (!requireLogin()) return;
+  if (view) shQuotesView = view;
+  shGoDashboard();
+  const panel = shPanel();
+  panel.innerHTML = `<div class="sh-loading"><i class="fas fa-spinner fa-spin"></i> Loading your quotes...</div>`;
+  panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  const data = await shApi("/quotes/my").catch(() => ({ success: false }));
+  if (!data.success) { panel.innerHTML = `<div class="sh-loading">Could not load your quotes. <button class="sh-btn ghost" onclick="loadMyQuotes()">Try again</button></div>`; return; }
+  const quotes = data.quotes || [];
+  const views = { all: ["All", () => true], pending: ["Waiting", (q) => q.status === "pending"], accepted: ["Accepted", (q) => q.status === "accepted"], rejected: ["Not selected", (q) => q.status === "rejected" || q.status === "withdrawn"] };
+  const list = quotes.filter(views[shQuotesView][1]);
+  panel.innerHTML = `<div class="sh-panel-head"><h2><i class="fas fa-file-invoice-dollar" style="color:var(--primary)"></i> ${shQuotesView === "accepted" ? "Quotes Accepted" : "My Quotes"}</h2>
+      <button class="sh-btn pri" onclick="showSection('find-services')"><i class="fas fa-search"></i> Find Jobs</button></div>
+    <div class="sh-tabs" style="flex-wrap:wrap">${Object.entries(views).map(([k, v]) => `<button class="sh-tab ${shQuotesView === k ? "on" : ""}" onclick="loadMyQuotes('${k}')">${v[0]} (${quotes.filter(v[1]).length})</button>`).join("")}
+      <button class="sh-tab" onclick="loadMyAssignedJobs({view:'current'})">My Jobs</button></div>
+    ${list.map((q) => `<div class="sh-job"><div class="sh-job-top"><div><h3>${shEsc(q.jobTitle || "Job")}</h3>
+        <div class="sh-meta"><span><i class="fas fa-money-bill-wave"></i> ${shKES(q.amount)}</span>${q.estimatedDays ? `<span><i class="far fa-clock"></i> ${shEsc(q.estimatedDays)} day(s)</span>` : ""}<span><i class="far fa-calendar"></i> Sent ${shDate(q.createdAt)}</span></div>
+        ${q.message ? `<div class="sh-empty" style="padding:6px 0 0">${shEsc(q.message).slice(0, 200)}</div>` : ""}</div>${shChip(SH_QUOTE_STATUS, q.status)}</div>
+      <div class="sh-actions">${q.status === "accepted" ? `<button class="sh-btn ok" onclick="loadMyAssignedJobs({view:'current'})"><i class="fas fa-briefcase"></i> Go to the job</button>` : `<button class="sh-btn ghost" onclick="handleViewJob('${q.jobId}')"><i class="fas fa-eye"></i> View job</button>`}</div></div>`).join("")
+      || `<div class="sh-job"><div class="sh-loading">${shQuotesView === "accepted" ? "No accepted quotes yet. When a client accepts your quote, it shows here." : "No quotes yet. Find open jobs and send your first quote."}</div></div>`}`;
+}
+
+/* ---------- Dashboard number cards open their lists ---------- */
+(function () {
+  const css = document.createElement("style");
+  css.textContent = `#user-stats .stat-card.sh-clickable{cursor:pointer;transition:transform .15s,box-shadow .15s;position:relative}
+  #user-stats .stat-card.sh-clickable:hover,#user-stats .stat-card.sh-clickable:focus-visible{transform:translateY(-3px);box-shadow:var(--shadow-lg);outline:none}
+  #user-stats .stat-card.sh-clickable::after{content:"View \\203A";position:absolute;right:12px;bottom:8px;font-size:.72rem;font-weight:700;color:var(--primary);opacity:.8}`;
+  document.head.appendChild(css);
+
+  function wire() {
+    const cards = Array.from(document.querySelectorAll("#user-stats .stat-card"));
+    if (cards.length < 4) return;
+    const prov = currentUser && currentUser.role === "service-provider";
+    const actions = prov
+      ? [() => loadMyQuotes("all"), () => loadMyAssignedJobs({ view: "completed" }), () => loadMyQuotes("accepted"), () => loadMyAssignedJobs({ view: "progress" })]
+      : [() => { shJobsTab = "all"; loadMyJobs(); }, () => { shJobsTab = "completed"; loadMyJobs(); }, () => { shJobsTab = "open"; loadMyJobs(); }, () => { shJobsTab = "progress"; loadMyJobs(); }];
+    actions.forEach((fn, i) => {
+      const c = cards[i];
+      if (!c) return;
+      c.classList.add("sh-clickable");
+      c.setAttribute("role", "button");
+      c.setAttribute("tabindex", "0");
+      c.onclick = fn;
+      c.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); } };
+    });
+  }
+  new MutationObserver(wire).observe(document.getElementById("user-stats") || document.body, { childList: true });
+  wire();
 })();
