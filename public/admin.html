@@ -50,7 +50,8 @@ h2{font-size:1.1rem;margin:22px 0 10px}
 .list{display:grid;gap:10px}
 .item{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;gap:12px;align-items:flex-start;cursor:pointer}
 .item:hover{border-color:var(--blue)}
-.av{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#34d399,var(--blue));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;flex:0 0 42px}
+.av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.av{position:relative;overflow:hidden;width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#34d399,var(--blue));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;flex:0 0 42px}
 .item .t{flex:1;min-width:0}.item .t b{display:block;overflow-wrap:anywhere}.item .meta{color:var(--muted);font-size:.83rem;display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:4px}.item .meta span{min-width:0;overflow-wrap:anywhere}
 .chip{display:inline-block;border-radius:999px;padding:2px 9px;font-size:.72rem;font-weight:700;background:#eef2f8;color:#334155;margin:2px 4px 0 0}
 .chip.g{background:#dcfce7;color:#166534}.chip.b{background:#dbeafe;color:#1e40af}.chip.r{background:#fee2e2;color:#991b1b}.chip.a{background:#fef3c7;color:#92400e}.chip.p{background:#f3e8ff;color:#6b21a8}
@@ -210,7 +211,7 @@ h2{font-size:1.1rem;margin:22px 0 10px}
     const d = await api(`/admin/users?q=${encodeURIComponent(uq)}&filter=${uf}`).catch(() => null);
     if (!d || !d.success) { box.innerHTML = `<div class="empty">${esc((d && d.message) || "Could not load")}</div>`; return; }
     box.innerHTML = `<div style="color:var(--muted);font-size:.85rem">${d.total} user${d.total === 1 ? "" : "s"}</div>` + (d.users.map((u) => `
-      <div class="item" data-uid="${esc(u.uid)}"><div class="av">${esc(ini(u.name))}</div><div class="t"><b>${esc(u.name)}</b>
+      <div class="item" data-uid="${esc(u.uid)}"><div class="av">${esc(ini(u.name))}<img src="/api/users/${encodeURIComponent(u.uid)}/avatar" alt="" loading="lazy" onerror="this.remove()"></div><div class="t"><b>${esc(u.name)}</b>
         <div class="meta"><span><i class="fas fa-envelope"></i> ${esc(u.email)}</span>${u.phone ? `<span><i class="fas fa-phone"></i> ${esc(u.phone)}</span>` : ""}${u.county ? `<span><i class="fas fa-map-marker-alt"></i> ${esc(u.county)}</span>` : ""}<span>Joined ${when(u.createdAt)}</span></div>
         <div>${u.roles.includes("service-provider") ? '<span class="chip g">Provider</span>' : ""}<span class="chip b">Client</span>${u.isAdmin ? '<span class="chip p">Admin</span>' : ""}${u.active === false ? '<span class="chip r">Suspended</span>' : ""}${u.emailVerified ? "" : '<span class="chip a">Email not verified</span>'}</div></div></div>`).join("") || `<div class="empty">No users found</div>`);
     box.querySelectorAll(".item").forEach((el) => el.onclick = () => openUser(el.dataset.uid));
@@ -221,6 +222,7 @@ h2{font-size:1.1rem;margin:22px 0 10px}
     if (!d || !d.success) { dr.body.innerHTML = `<div class="empty">${esc((d && d.message) || "Could not load")}</div>`; return; }
     const u = d.user, prov = u.roles.includes("service-provider");
     dr.body.innerHTML = `
+      <div class="av" style="width:72px;height:72px;font-size:1.6rem;margin-bottom:8px">${esc(ini(u.name))}<img src="/api/users/${encodeURIComponent(u.uid)}/avatar" alt="" onerror="this.remove()"></div>
       <h3>${esc(u.name)}</h3>
       <div>${prov ? '<span class="chip g">Provider</span>' : ""}<span class="chip b">Client</span>${u.isAdmin ? '<span class="chip p">Admin</span>' : ""}${u.active === false ? '<span class="chip r">Suspended</span>' : '<span class="chip g">Active</span>'}</div>
       <dl class="kv"><dt>Email</dt><dd>${esc(u.email)} ${u.emailVerified ? '<span class="chip g">verified</span>' : '<span class="chip a">not verified</span>'}</dd>

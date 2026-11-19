@@ -36,6 +36,59 @@ router.get("/dashboard/stats", verifyJWT, async (req, res) => {
   }
 });
 
+// ── Profile pictures ─────────────────────────────────────────────────────
+// Stored in Firestore (avatars/{uid}) as a small compressed JPEG/PNG/WebP; served at /api/users/:uid/avatar.
+const AVATARS = "avatars";
+function parseImage(dataUrl) {
+  const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ""));
+  if (!m) return null;
+  if (m[2].length > 550000) return null; // ~400 KB; the website shrinks photos to 512px before upload
+  return { mime: m[1], data: m[2] };
+}
+
+router.post("/me/avatar", verifyJWT, async (req, res) => {
+  const img = parseImage(req.body && req.body.image);
+  if (!img) return res.status(422).json({ success: false, message: "Please choose a JPG, PNG or WebP photo" });
+  try {
+    const now = new Date().toISOString();
+    await firebase.db.collection(AVATARS).doc(req.user.uid).set({ uid: req.user.uid, mime: img.mime, data: img.data, updatedAt: now });
+    const avatar = `/api/users/${req.user.uid}/avatar?v=${Date.now()}`;
+    await firebase.db.collection(firebase.COLLECTIONS.USERS).doc(req.user.uid).update({ avatar, avatarUpdatedAt: now, updatedAt: now });
+    return res.json({ success: true, avatar });
+  } catch (e) {
+    console.error("Avatar upload error:", e);
+    return res.status(500).json({ success: false, message: "Could not save your photo. Please try again." });
+  }
+});
+
+router.delete("/me/avatar", verifyJWT, async (req, res) => {
+  try {
+    await firebase.db.collection(AVATARS).doc(req.user.uid).delete().catch(() => {});
+    await firebase.db.collection(firebase.COLLECTIONS.USERS).doc(req.user.uid).update({ avatar: null, updatedAt: new Date().toISOString() });
+    return res.json({ success: true });
+  } catch (e) {
+    return res.status(500).json({ success: false, message: "Could not remove your photo" });
+  }
+});
+
+router.get("/:uid/avatar", async (req, res) => {
+  try {
+    const d = await firebase.db.collection(AVATARS).doc(req.params.uid).get();
+    if (d.exists) {
+      const a = d.data();
+      res.setHeader("Content-Type", a.mime);
+      res.setHeader("Cache-Control", "public, max-age=300");
+      return res.end(Buffer.from(a.data, "base64"));
+    }
+    // Google / Facebook profile photo
+    const u = await firebase.db.collection(firebase.COLLECTIONS.USERS).doc(req.params.uid).get();
+    const url = u.exists && u.data().avatar;
+    res.setHeader("Cache-Control", "public, max-age=300");
+    if (url && /^https:\/\//.test(url)) return res.redirect(302, url);
+    return res.status(404).end();
+  } catch (e) { return res.status(500).end(); }
+});
+
 router.get("/:uid", optionalAuth, async (req, res) => {
   try {
     const doc = await firebase.db.collection(firebase.COLLECTIONS.USERS).doc(req.params.uid).get();

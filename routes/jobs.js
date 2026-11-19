@@ -21,6 +21,18 @@ function parsePhoto(dataUrl) {
   if (m[2].length > 1000000) return null; // ~750 KB image; the website compresses photos before upload
   return { mime: m[1], data: m[2] };
 }
+// Pinned job location: exact pin for the client and the hired provider, approximate area (~1 km) for everyone else.
+function parseLocation(l) {
+  if (!l || typeof l !== "object") return null;
+  const lat = Number(l.lat), lng = Number(l.lng);
+  if (!isFinite(lat) || !isFinite(lng) || lat < -5.5 || lat > 5.5 || lng < 33.5 || lng > 42.5) return null; // Kenya
+  return { lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6, label: String(l.label || "").slice(0, 200) || null, accuracy: isFinite(Number(l.accuracy)) ? Math.round(Number(l.accuracy)) : null, pinnedAt: new Date().toISOString() };
+}
+function approxLocation(l) {
+  if (!l) return null;
+  return { lat: Math.round(l.lat * 100) / 100, lng: Math.round(l.lng * 100) / 100, approximate: true };
+}
+
 async function savePhotos(jobId, dataUrls, startIndex) {
   const out = [];
   for (const d of (dataUrls || []).slice(0, MAX_PHOTOS - startIndex)) {
@@ -334,7 +346,7 @@ router.get("/", optionalAuth, async (req, res) => {
     const wanted = (!status || status === "all" || status === "completed" || status === "cancelled") ? "open" : status;
     q = q.where("status", "==", wanted); // completed jobs are private to the client who posted them
     const snapshot = await q.limit(500).get();
-    let jobs = snapshot.docs.map((doc) => { const { timeline, ...rest } = doc.data(); return { id: doc.id, ...rest }; });
+    let jobs = snapshot.docs.map((doc) => { const { timeline, location, ...rest } = doc.data(); return { id: doc.id, ...rest, location: approxLocation(location), hasPin: !!location }; });
     if (category && category !== "all") jobs = jobs.filter((j) => j.category === category);
     if (county && county !== "all") jobs = jobs.filter((j) => j.county === county);
     if (subcounty && subcounty !== "all") jobs = jobs.filter((j) => j.subcounty === subcounty);
@@ -358,9 +370,9 @@ router.get("/:id", optionalAuth, async (req, res) => {
       return res.status(404).json({ success: false, message: "Job not found" });
     }
     doc.ref.update({ views: (job.views || 0) + 1 }).catch(() => {});
-    const { timeline, ...pub } = job;
+    const { timeline, location, ...pub } = job;
     const insider = req.user && (req.user.uid === job.clientId || req.user.uid === job.assignedProviderId);
-    return res.json({ success: true, job: { id: doc.id, ...(insider ? job : pub) } });
+    return res.json({ success: true, job: { id: doc.id, ...(insider ? job : { ...pub, location: approxLocation(location), hasPin: !!location }) } });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Could not fetch job" });
   }
@@ -370,11 +382,12 @@ router.post("/", verifyJWT, [body("title").trim().notEmpty(), body("description"
   const err = validationErrors(req, res);
   if (err) return;
   const { title, description, category, county, subcounty, budgetMin, budgetMax, urgency, photos } = req.body;
+  const location = parseLocation(req.body.location);
   try {
     const jobId = uuidv4();
     const now = new Date().toISOString();
     const savedPhotos = await savePhotos(jobId, photos, 0);
-    const jobData = { id: jobId, title, description, category, county, subcounty: subcounty || null, budgetMin: parseInt(budgetMin), budgetMax: parseInt(budgetMax), urgency: urgency || "normal", photos: savedPhotos, status: "open", clientId: req.user.uid, clientName: req.user.name, clientEmail: req.user.email, quotesCount: 0, views: 0, createdAt: now, updatedAt: now,
+    const jobData = { id: jobId, title, description, category, county, subcounty: subcounty || null, budgetMin: parseInt(budgetMin), budgetMax: parseInt(budgetMax), urgency: urgency || "normal", photos: savedPhotos, location, status: "open", clientId: req.user.uid, clientName: req.user.name, clientEmail: req.user.email, quotesCount: 0, views: 0, createdAt: now, updatedAt: now,
       timeline: [ev("posted", "Job posted", req.user, savedPhotos.length ? `${savedPhotos.length} photo(s) attached` : null)] };
     await firebase.db.collection(firebase.COLLECTIONS.JOBS).doc(jobId).set(jobData);
     firebase.db.collection(firebase.COLLECTIONS.USERS).doc(req.user.uid).update({ jobsPosted: admin.firestore.FieldValue.increment(1) }).catch(() => {});
@@ -382,6 +395,26 @@ router.post("/", verifyJWT, [body("title").trim().notEmpty(), body("description"
   } catch (error) {
     console.error("Post job error:", error);
     return res.status(500).json({ success: false, message: "Could not post job" });
+  }
+});
+
+// Client pins / moves / removes the job location
+router.put("/:id/location", verifyJWT, async (req, res) => {
+  try {
+    const doc = await firebase.db.collection(firebase.COLLECTIONS.JOBS).doc(req.params.id).get();
+    if (!doc.exists) return res.status(404).json({ success: false, message: "Job not found" });
+    const job = doc.data();
+    if (job.clientId !== req.user.uid) return res.status(403).json({ success: false, message: "Only the client can pin the job location" });
+    if (job.status === "completed" || job.status === "cancelled") return res.status(400).json({ success: false, message: "This job is closed" });
+    const clear = req.body && req.body.location === null;
+    const location = clear ? null : parseLocation(req.body && req.body.location);
+    if (!clear && !location) return res.status(422).json({ success: false, message: "Pin a location inside Kenya" });
+    await doc.ref.update({ location, updatedAt: new Date().toISOString(), timeline: addEv(ev("location", clear ? "Location pin removed" : "Location pinned", req.user, location && location.label)) });
+    if (job.assignedProviderId) notify(job.assignedProviderId, "location_updated", { jobId: doc.id, title: job.title, message: `The client ${clear ? "removed" : "updated"} the location for "${job.title}"` });
+    return res.json({ success: true, location });
+  } catch (error) {
+    console.error("Pin location error:", error);
+    return res.status(500).json({ success: false, message: "Could not save the location" });
   }
 });
 

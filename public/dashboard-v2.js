@@ -191,6 +191,7 @@ function shJobCard(job) {
     }
     if ((job.photos || []).length < SH_MAX_PHOTOS) acts.push(`<label class="sh-btn ghost" style="cursor:pointer"><input type="file" accept="image/*" multiple hidden onchange="shAddJobPhotos('${job.id}', this)"><i class="fas fa-camera"></i> Add Photos</label>`);
     if (job.conversationId) acts.push(`<button class="sh-btn ghost" onclick="openJobChat('${job.conversationId}','${shEsc(job.assignedProviderName || "Provider").replace(/'/g, "")}')"><i class="fas fa-comments"></i> Job Chat</button>`);
+    acts.push(`<button class="sh-btn ghost" onclick="shPinJob('${job.id}')"><i class="fas fa-map-marker-alt" style="color:#e53935"></i> ${job.location ? "Location pinned · change" : "Pin location"}</button>`);
     if (job.status === "open") acts.push(`<button class="sh-btn danger" onclick="cancelJob('${job.id}')"><i class="fas fa-times"></i> Cancel Job</button>`);
   }
   return `<div class="sh-job" id="job-${job.id}">
@@ -297,6 +298,8 @@ async function loadMyAssignedJobs(opts = {}) {
   const data = await shApi("/jobs/my/assigned").catch(() => ({ success: false }));
   if (!data.success) { panel.innerHTML = `<div class="sh-loading">Could not load your jobs. <button class="sh-btn ghost" onclick="loadMyAssignedJobs()">Try again</button></div>`; return; }
   const jobs = data.jobs || [];
+  window.shAssignedJobs = jobs;
+  const mapBtn = (job) => job.location ? `<button class="sh-btn ghost" onclick="shViewJobLocation('${job.id}','assigned')"><i class="fas fa-map-marker-alt" style="color:#e53935"></i> Map &amp; directions</button>` : "";
   const offers = jobs.filter((j) => j.status === "awaiting-provider" || (j.acceptedQuoteId && !j.providerAcceptedAt && j.status !== "in-progress" && j.status !== "pending-completion"));
   const working = jobs.filter((j) => !offers.includes(j));
   const today = new Date().toISOString().slice(0, 10);
@@ -310,11 +313,11 @@ async function loadMyAssignedJobs(opts = {}) {
         ${shPhotoStrip(job)}
         <div class="sh-actions" style="align-items:center"><label style="font-size:.85rem;color:var(--dark-gray)">Start date <input type="date" id="start-${job.id}" value="${today}" min="${today}" style="margin-left:6px;padding:7px;border:1px solid var(--light-gray);border-radius:8px"></label>
           <button class="sh-btn ok" onclick="providerAcceptJob('${job.id}')"><i class="fas fa-handshake"></i> Accept Job</button>
-          <button class="sh-btn danger" onclick="providerDeclineJob('${job.id}')"><i class="fas fa-times"></i> Decline</button></div></div>`).join("")}
+          <button class="sh-btn danger" onclick="providerDeclineJob('${job.id}')"><i class="fas fa-times"></i> Decline</button>${mapBtn(job)}</div></div>`).join("")}
     ${working.map((job) => `<div class="sh-job"><div class="sh-job-top"><div><h3>${shEsc(job.title)}</h3>${meta(job)}
         ${job.plannedStartDate ? `<div class="sh-meta" style="margin-top:4px"><span><i class="far fa-calendar-check"></i> Start date ${shDate(job.plannedStartDate)}</span></div>` : ""}</div>${shChip(SH_STATUS, job.status)}</div>
       <div class="sh-actions">${job.status === "in-progress" ? `<button class="sh-btn ok" onclick="requestJobCompletion('${job.id}')"><i class="fas fa-check"></i> Mark Complete</button>` : `<span class="sh-empty"><i class="fas fa-clock"></i> Waiting for the client to confirm completion</span>`}
-        <button class="sh-btn ghost" onclick="openTrack('${job.id}')"><i class="fas fa-route"></i> Track &amp; Update</button>
+        <button class="sh-btn ghost" onclick="openTrack('${job.id}')"><i class="fas fa-route"></i> Track &amp; Update</button>${mapBtn(job)}
         ${job.conversationId ? `<button class="sh-btn ghost" onclick="openJobChat('${job.conversationId}','${shEsc(job.clientName || "Client").replace(/'/g, "")}')"><i class="fas fa-comments"></i> Job Chat</button>` : ""}</div>${shPhotoStrip(job)}</div>`).join("")}
     ${!jobs.length ? `<div class="sh-job"><div class="sh-loading">No jobs yet. Send quotes on open jobs. When a client accepts your quote, the offer appears here for you to accept.</div></div>` : ""}`;
 }
@@ -382,7 +385,7 @@ function loadAccountPanel(opts = {}) {
     <div class="sh-panel-head"><h2><i class="fas fa-user-circle" style="color:var(--primary)"></i> My Account</h2>
       <button class="sh-btn ghost" onclick="loadDashboardPanel()"><i class="fas fa-arrow-left"></i> Back to My Jobs</button></div>
     <div class="sh-job"><div class="sh-job-top" style="align-items:center;justify-content:flex-start;gap:16px">
-      <div style="width:64px;height:64px;border-radius:50%;background:var(--gradient-primary,var(--primary));color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:800;flex:0 0 64px">${shEsc(initials)}</div>
+      ${typeof shAccountAvatar === "function" ? shAccountAvatar() : `<div style="width:64px;height:64px;border-radius:50%;background:var(--gradient-primary,var(--primary));color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:800;flex:0 0 64px">${shEsc(initials)}</div>`}
       <div><h3 style="margin:0">${shEsc(u.name || "")}</h3>
         <div class="sh-meta"><span><i class="fas fa-envelope"></i> ${shEsc(u.email || "")}</span>${u.phone ? `<span><i class="fas fa-phone"></i> ${shEsc(u.phone)}</span>` : ""}
         ${u.county ? `<span><i class="fas fa-map-marker-alt"></i> ${shEsc(u.county)}</span>` : ""}</div>
@@ -536,10 +539,12 @@ async function loadConversations() {
   if (data.success && data.conversations && data.conversations.length) {
     listEl.innerHTML = data.conversations.map((conv) => {
       const otherName = Object.entries(conv.participantNames || {}).find(([k]) => k !== currentUser.uid)?.[1] || "User";
+      const otherUid = (conv.participants || []).find((p) => p !== currentUser.uid);
+      (window.shConvPeer = window.shConvPeer || {})[conv.id] = otherUid;
       const unread = (conv.unreadCount && conv.unreadCount[currentUser.uid]) || 0;
       const safeName = shEsc(otherName).replace(/'/g, "&#39;");
       return `<div class="conversation-item ${conv.id === active ? "active" : ""}" onclick="openConversation('${conv.id}', this.dataset.name)" data-name="${shEsc(otherName)}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--light-gray);">
-        <div style="width:46px;height:46px;border-radius:50%;background:var(--gradient-primary,var(--primary));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;flex-shrink:0;">${shEsc(shcInitials(otherName))}</div>
+        ${typeof shAvatarHTML === "function" ? shAvatarHTML(otherUid, otherName, 46) : `<div style="width:46px;height:46px;border-radius:50%;background:var(--gradient-primary,var(--primary));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;flex-shrink:0;">${shEsc(shcInitials(otherName))}</div>`}
         <div style="flex:1;min-width:0;">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
             <span style="font-weight:700;color:var(--dark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${safeName}</span>
@@ -561,6 +566,7 @@ async function openConversation(convId, otherName) {
   document.getElementById("current-chat-user").textContent = otherName;
   document.getElementById("current-chat-status").textContent = "Online";
   const av = document.getElementById("current-chat-avatar"); if (av) av.textContent = shcInitials(otherName);
+  if (av && typeof shDecorateAvatar === "function") shDecorateAvatar(av, (window.shConvPeer || {})[convId], otherName);
   const input = document.getElementById("chat-input");
   input.disabled = false; document.getElementById("send-message").disabled = false;
   input.placeholder = `Message ${otherName}...`;
@@ -685,12 +691,13 @@ async function handlePostJob() {
   if (!getToken()) { showNotification("Please sign in to post a job", "error"); showSection("auth"); return; }
   const btn = document.getElementById("submit-post-job"); if (btn) btn.disabled = true;
   showNotification(shPendingPhotos.length ? `Posting your job with ${shPendingPhotos.length} photo(s)...` : "Posting your job...", "info");
-  const data = await shApi("/jobs", { method: "POST", body: JSON.stringify({ title, category, county, subcounty, description, budgetMin: parseInt(budgetMin), budgetMax: parseInt(budgetMax), urgency, photos: shPendingPhotos }) }).catch(() => ({ success: false, message: "Cannot reach ServiceHub. Check your connection." }));
+  const data = await shApi("/jobs", { method: "POST", body: JSON.stringify({ title, category, county, subcounty, description, budgetMin: parseInt(budgetMin), budgetMax: parseInt(budgetMax), urgency, photos: shPendingPhotos, location: window.shPendingLocation || null }) }).catch(() => ({ success: false, message: "Cannot reach ServiceHub. Check your connection." }));
   if (btn) btn.disabled = false;
   if (!data.success) { showNotification(data.message || (data.errors && data.errors[0] && data.errors[0].msg) || "Failed to post job", "error"); return; }
   document.getElementById("post-job-modal").classList.remove("active");
   ["job-title", "job-description", "job-budget-min", "job-budget-max"].forEach((id) => { const el = document.getElementById(id); if (el) el.value = ""; });
   shPendingPhotos = []; renderPostJobPhotos();
+  window.shPendingLocation = null; if (typeof shRenderPostPin === "function") shRenderPostPin();
   showNotification("Job posted! Service providers can now see it and send quotes.", "success");
   if (typeof loadJobs === "function") loadJobs();
   const dash = document.getElementById("dashboard");
@@ -723,6 +730,15 @@ async function handleViewJob(jobId) {
   set("detail-job-description", job.description); set("detail-job-location", `${job.county}${job.subcounty ? ", " + job.subcounty : ""}`);
   set("detail-job-time", new Date(job.createdAt).toLocaleDateString("en-KE", { year: "numeric", month: "long", day: "numeric" }));
   set("detail-job-client", job.clientName || "Client");
+  window.shDetailJob = job;
+  const locEl = document.getElementById("detail-job-location");
+  if (locEl) {
+    let b = document.getElementById("detail-job-map-btn");
+    if (!b) { b = document.createElement("button"); b.id = "detail-job-map-btn"; b.type = "button"; b.className = "sh-btn ghost"; b.style.marginLeft = "8px"; locEl.after(b); }
+    b.style.display = job.location ? "" : "none";
+    b.innerHTML = job.location && job.location.approximate ? '<i class="fas fa-map"></i> See area on map' : '<i class="fas fa-map-marker-alt" style="color:#e53935"></i> Map &amp; directions';
+    b.onclick = () => shViewJobLocation(job.id);
+  }
   const imgs = document.getElementById("detail-job-images");
   if (imgs) imgs.innerHTML = (job.photos || []).map((p, i) => `<img src="${p.url}" loading="lazy" alt="Job photo ${i + 1}" onclick="openImageModal(this.src)">`).join("") || `<span style="color:var(--medium-gray);font-size:.9rem"><i class="far fa-image"></i> No photos attached</span>`;
   const q = document.getElementById("quote-job-id"); if (q) q.value = jobId;

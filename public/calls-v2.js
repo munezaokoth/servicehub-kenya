@@ -223,10 +223,11 @@
     initSpeakerButton();
   }
 
-  function showScreen({ name, status, type, mode }) {
+  function showScreen({ name, status, type, mode, uid }) {
     injectUI();
     const el = $("shc-call");
     $("shc-av").textContent = initials(name);
+    if (typeof window.shDecorateAvatar === "function") window.shDecorateAvatar($("shc-av"), uid, name);
     $("shc-name").textContent = name || "ServiceHub user";
     setStatus(status || "");
     el.classList.add("open");
@@ -393,13 +394,13 @@
     unlockAudio();
 
     S.call = { id: null, conversationId: convId, peerName, type, role: "caller", state: "starting" };
-    showScreen({ name: peerName, status: "Starting call…", type, mode: "outgoing" });
+    showScreen({ name: peerName, status: "Starting call…", type, mode: "outgoing", uid: (window.shConvPeer || {})[convId] });
     try { S.local = await getMedia(type); } catch (e) { mediaError(e); cleanupMedia(); hideScreen(); S.call = null; return; }
     if (!S.call) { cleanupMedia(); return; } // cancelled while asking for the mic
     if (S.local.getVideoTracks().length) {
       const lv = $("shc-local-video"); lv.srcObject = S.local; lv.play().catch(() => {});
       $("shc-call").classList.add("video-live");
-    } else if (type === "video") { S.call.type = "voice"; showScreen({ name: peerName, status: "Calling…", type: "voice", mode: "outgoing" }); }
+    } else if (type === "video") { S.call.type = "voice"; showScreen({ name: peerName, status: "Calling…", type: "voice", mode: "outgoing", uid: (window.shConvPeer || {})[convId] }); }
     keepAwake();
 
     try {
@@ -466,7 +467,7 @@
     S.pendingIce = (d.candidates || []).slice();
     sock() && sock().emit("call_ringing", { callId: d.callId });
     const video = d.callType === "video";
-    showScreen({ name: d.callerName, status: video ? "Incoming video call…" : "Incoming voice call…", type: d.callType, mode: "incoming" });
+    showScreen({ name: d.callerName, status: video ? "Incoming video call…" : "Incoming voice call…", type: d.callType, mode: "incoming", uid: d.callerId });
     flashTitle(`📞 ${d.callerName} is calling…`);
     keepAwake();
     if (!document.hidden) startRingtone();
@@ -512,7 +513,7 @@
     clearTimeout(S.incomingGuard);
     S.incoming = null;
     S.call = { id: inc.callId, conversationId: inc.conversationId, peerName: inc.callerName, type: inc.callType, role: "callee", state: "answering" };
-    showScreen({ name: inc.callerName, status: "Connecting…", type: inc.callType, mode: "call" });
+    showScreen({ name: inc.callerName, status: "Connecting…", type: inc.callType, mode: "call", uid: inc.callerId });
 
     try { S.local = await getMedia(inc.callType); } catch (e) { mediaError(e); sock() && sock().emit("call_reject", { callId: inc.callId }); finish("error"); return; }
     if (S.local.getVideoTracks().length) {
