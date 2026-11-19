@@ -508,6 +508,19 @@
   /* ── Hook into the site (after the main page has set itself up) ── */
   function install() {
     buildSection();
+    // Menu link straight to "Services near me" (kept alongside the Find Services tabs)
+    const nav = document.querySelector(".nav-menu");
+    if (nav && !$("snm-nav")) {
+      const a = document.createElement("a");
+      a.href = "#"; a.className = "nav-link"; a.id = "snm-nav"; a.textContent = "Services Near Me";
+      nav.insertBefore(a, nav.querySelector('[data-section="find-services"]') || null);
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        S.mode = "near"; S.viaNav = true;
+        showSection("find-services");
+        try { if (navMenu && navMenu.classList.contains("active")) toggleMobileMenu(); } catch (err) {}
+      });
+    }
     // Dashboard card
     const acts = document.querySelector("#dashboard .dashboard-actions");
     if (acts && !$("my-services-action")) {
@@ -522,7 +535,14 @@
     if (typeof orig === "function" && !orig.__snm) {
       const wrapped = function (id) {
         const r = orig.apply(this, arguments);
-        if (id === "find-services") setTimeout(search, 50);
+        const viaNav = !!S.viaNav; S.viaNav = false;
+        const link = $("snm-nav");
+        if (link) {
+          link.classList.toggle("active", id === "find-services" && viaNav);
+          const fs = document.querySelector('.nav-link[data-section="find-services"]');
+          if (fs && id === "find-services" && viaNav) fs.classList.remove("active");
+        }
+        if (id === "find-services") { if (viaNav && $("snm-wrap")) setMode("near", true); setTimeout(search, 50); }
         return r;
       };
       wrapped.__snm = true;
