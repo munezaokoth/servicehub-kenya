@@ -60,8 +60,11 @@ router.get("/conversations/:id/messages", verifyJWT, async (req, res) => {
 });
 
 router.post("/conversations/:id/messages", verifyJWT, async (req, res) => {
-  const { text, replyTo } = req.body;
-  if (!text || !text.trim()) return res.status(422).json({ success: false, message: "Message text is required" });
+  const { replyTo, image } = req.body;
+  const text = String(req.body.text || "");
+  const photo = image ? parsePhoto(image) : null;
+  if (image && !photo) return res.status(422).json({ success: false, message: "Please send a JPG, PNG or WebP photo under about 700 KB" });
+  if (!text.trim() && !photo) return res.status(422).json({ success: false, message: "Message text is required" });
   if (text.length > 4000) return res.status(422).json({ success: false, message: "Message is too long" });
   try {
     const convDoc = await firebase.db.collection(firebase.COLLECTIONS.CONVERSATIONS).doc(req.params.id).get();
@@ -73,16 +76,22 @@ router.post("/conversations/:id/messages", verifyJWT, async (req, res) => {
     const otherUserId = conv.participants.find((p) => p !== req.user.uid);
     const msgData = { id: msgId, conversationId: req.params.id, senderId: req.user.uid, senderName: req.user.name, recipientId: otherUserId, text: text.trim(), read: false, createdAt: now, deliveredAt: null, readAt: null };
     if (await receipts.isOnline(otherUserId)) msgData.deliveredAt = now; // their app is open, it arrives instantly
+    if (photo) {
+      await firebase.db.collection(PHOTOS).doc(msgId).set({ conversationId: req.params.id, mime: photo.mime, data: photo.data, createdAt: now });
+      msgData.type = "photo";
+      msgData.photoUrl = photoUrl(msgId);
+    }
     // Reply to an earlier message in the same conversation (a short quote is kept with the reply)
     if (replyTo) {
       const orig = await firebase.db.collection(firebase.COLLECTIONS.MESSAGES).doc(String(replyTo)).get();
       if (orig.exists && orig.data().conversationId === req.params.id) {
         const o = orig.data();
-        msgData.replyTo = { id: o.id, senderId: o.senderId, senderName: o.senderName || "", text: o.deleted ? "" : String(o.text || "").slice(0, 160), deleted: !!o.deleted, type: o.type || null };
+        msgData.replyTo = { id: o.id, senderId: o.senderId, senderName: o.senderName || "", text: o.deleted ? "" : String(o.text || (o.type === "photo" ? "📷 Photo" : "")).slice(0, 160), deleted: !!o.deleted, type: o.type || null };
       }
     }
     await firebase.db.collection(firebase.COLLECTIONS.MESSAGES).doc(msgId).set(msgData);
-    await convDoc.ref.update({ lastMessage: text.trim().slice(0, 100), lastMessageAt: now, lastMessageSenderId: req.user.uid, [`unreadCount.${otherUserId}`]: admin.firestore.FieldValue.increment(1) });
+    const preview = photo ? (text.trim() ? `📷 ${text.trim()}` : "📷 Photo") : text.trim();
+    await convDoc.ref.update({ lastMessage: preview.slice(0, 100), lastMessageAt: now, lastMessageSenderId: req.user.uid, [`unreadCount.${otherUserId}`]: admin.firestore.FieldValue.increment(1) });
     if (global.io) {
       global.io.to(`conversation:${req.params.id}`).emit("new_message", msgData);
       global.io.to(`user:${otherUserId}`).emit("new_conversation_message", { conversationId: req.params.id, message: msgData });
@@ -90,7 +99,7 @@ router.post("/conversations/:id/messages", verifyJWT, async (req, res) => {
     // Phone notification (app closed or in the background); the phone confirms delivery back to us
     push.sendToUser(otherUserId, {
       type: "message", conversationId: req.params.id, messageId: msgId, senderName: req.user.name || "ServiceHub",
-      title: req.user.name || "New message", body: text.trim().slice(0, 160), recipientId: otherUserId, ackToken: receipts.ackToken(msgId, otherUserId),
+      title: req.user.name || "New message", body: preview.slice(0, 160), recipientId: otherUserId, ackToken: receipts.ackToken(msgId, otherUserId),
     }, { ttl: 24 * 3600, urgency: "high", topic: `m${String(req.params.id).replace(/-/g, "").slice(0, 30)}` }).catch((e) => console.error("Message push error:", e.message));
     return res.status(201).json({ success: true, message: msgData });
   } catch (error) {
@@ -100,10 +109,38 @@ router.post("/conversations/:id/messages", verifyJWT, async (req, res) => {
 });
 
 
+// ── Photos in messages ──────────────────────────────────────────────────────
+// Stored in their own collection (the phone shrinks them first) and shown through a signed link,
+// so only people who have the message can open the photo.
+const crypto = require("crypto");
+const PHOTOS = "message_photos";
+function parsePhoto(dataUrl) {
+  const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ""));
+  if (!m || m[2].length > 950000) return null;
+  return { mime: m[1], data: m[2] };
+}
+const photoSig = (id) => crypto.createHmac("sha256", process.env.JWT_SECRET || "servicehub").update(`photo:${id}`).digest("hex").slice(0, 32);
+const photoUrl = (id) => `/api/chat/photos/${id}?s=${photoSig(id)}`;
+
+// GET /api/chat/photos/:msgId?s=signature
+router.get("/photos/:msgId", async (req, res) => {
+  try {
+    const id = String(req.params.msgId);
+    const sig = String(req.query.s || "");
+    if (sig.length !== 32 || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(photoSig(id)))) return res.status(403).end();
+    const doc = await firebase.db.collection(PHOTOS).doc(id).get();
+    if (!doc.exists) return res.status(404).end();
+    const p = doc.data();
+    res.setHeader("Content-Type", p.mime);
+    res.setHeader("Cache-Control", "private, max-age=2592000, immutable");
+    return res.end(Buffer.from(p.data, "base64"));
+  } catch (e) { return res.status(500).end(); }
+});
+
 // ── Edit and delete messages ───────────────────────────────────────────────
 const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000; // your own messages can be edited for 24 hours
 function publicMsg(m) {
-  if (m.deleted) { const { text, edits, ...rest } = m; return { ...rest, text: "" }; }
+  if (m.deleted) { const { text, edits, photoUrl: _p, ...rest } = m; return { ...rest, text: "" }; }
   const { edits, ...rest } = m; return rest; // earlier versions stay on the server only
 }
 async function loadOwnMessage(req, res) {
@@ -124,20 +161,20 @@ async function refreshPreview(convDoc, conv, msg, newText) {
 // PUT /api/chat/conversations/:id/messages/:msgId  { text }
 router.put("/conversations/:id/messages/:msgId", verifyJWT, async (req, res) => {
   const text = String((req.body && req.body.text) || "").trim();
-  if (!text) return res.status(422).json({ success: false, message: "Message text is required" });
   if (text.length > 4000) return res.status(422).json({ success: false, message: "Message is too long" });
   try {
     const it = await loadOwnMessage(req, res); if (!it) return;
     const m = it.msg;
     if (m.senderId !== req.user.uid) return res.status(403).json({ success: false, message: "You can only edit your own messages" });
     if (m.system || m.type === "call" || m.deleted) return res.status(422).json({ success: false, message: "This message can't be edited" });
+    if (!text && m.type !== "photo") return res.status(422).json({ success: false, message: "Message text is required" });
     if (Date.now() - new Date(m.createdAt).getTime() > EDIT_WINDOW_MS) return res.status(422).json({ success: false, message: "Messages can only be edited within 24 hours of sending" });
     if (text === m.text) return res.json({ success: true, message: publicMsg(m) });
     const now = new Date().toISOString();
     const updates = { text, edited: true, editedAt: now, edits: admin.firestore.FieldValue.arrayUnion({ text: m.text, at: m.editedAt || m.createdAt }) };
     await it.ref.update(updates);
     const out = publicMsg({ ...m, text, edited: true, editedAt: now });
-    await refreshPreview(it.convDoc, it.conv, m, text);
+    await refreshPreview(it.convDoc, it.conv, m, m.type === "photo" ? (text ? `📷 ${text}` : "📷 Photo") : text);
     if (global.io) global.io.to(`conversation:${req.params.id}`).emit("message_updated", out);
     return res.json({ success: true, message: out });
   } catch (error) {
@@ -159,7 +196,8 @@ router.delete("/conversations/:id/messages/:msgId", verifyJWT, async (req, res) 
     if (m.senderId !== req.user.uid) return res.status(403).json({ success: false, message: "You can only delete your own messages for everyone" });
     if (m.system) return res.status(422).json({ success: false, message: "This message can't be deleted" });
     const now = new Date().toISOString();
-    await it.ref.update({ deleted: true, deletedAt: now, text: "", edits: admin.firestore.FieldValue.delete() });
+    await it.ref.update({ deleted: true, deletedAt: now, text: "", edits: admin.firestore.FieldValue.delete(), photoUrl: admin.firestore.FieldValue.delete() });
+    if (m.type === "photo") await firebase.db.collection(PHOTOS).doc(m.id).delete().catch(() => {});
     const out = publicMsg({ ...m, deleted: true, deletedAt: now });
     await refreshPreview(it.convDoc, it.conv, m, "This message was deleted");
     if (global.io) global.io.to(`conversation:${req.params.id}`).emit("message_updated", out);

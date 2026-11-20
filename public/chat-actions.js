@@ -14,7 +14,8 @@
   const api = (path, opts = {}) => fetch(`${window.API_BASE || "/api"}${path}`, { ...opts, headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` } })
     .then((r) => r.json().catch(() => ({ success: false, message: `Server error (${r.status})` }))).catch(() => ({ success: false, message: "Cannot reach ServiceHub. Check your connection." }));
   const MSGS = {}; // id → message, for replies and edits
-  const S = { reply: null, edit: null };
+  const S = { reply: null, edit: null, photos: [] };
+  const MAX_PHOTOS = 6;
 
   const st = document.createElement("style");
   st.textContent = `
@@ -45,7 +46,18 @@
   #shm-bar .shm-bt{flex:1;min-width:0;border-left:3px solid #f28a12;padding-left:9px}
   #shm-bar .shm-bt b{display:block;color:var(--primary);font-size:.8rem}
   #shm-bar .shm-bt span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dark-gray)}
-  #shm-bar button{border:0;background:none;font-size:1.3rem;color:var(--medium-gray);cursor:pointer;line-height:1}`;
+  #shm-bar button{border:0;background:none;font-size:1.3rem;color:var(--medium-gray);cursor:pointer;line-height:1}
+  .shm-photo{display:block;max-width:240px;width:100%;max-height:300px;object-fit:cover;border-radius:10px;margin:2px 0 4px;cursor:zoom-in;background:rgba(0,0,0,.08);min-height:120px}
+  .shm-photo-cap{display:block;margin-top:2px}
+  .shm-attach{width:44px;height:44px;flex:0 0 44px;border-radius:50%;border:1.5px solid var(--light-gray);background:var(--white);color:var(--primary);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:1.1rem;padding:0}
+  .shm-attach:disabled{opacity:.5;cursor:default}
+  #shm-photos{display:none;gap:8px;padding:8px 12px;border-top:1px solid var(--light-gray);background:var(--light);overflow-x:auto}
+  #shm-photos.on{display:flex}
+  .shm-pv{position:relative;width:68px;height:68px;flex:0 0 68px;border-radius:9px;overflow:hidden;background:#ddd}
+  .shm-pv img{width:100%;height:100%;object-fit:cover}
+  .shm-pv button{position:absolute;top:3px;right:3px;width:22px;height:22px;border-radius:50%;border:0;background:rgba(0,0,0,.65);color:#fff;cursor:pointer;line-height:22px;padding:0}
+  .shm-pv-note{align-self:center;font-size:.8rem;color:var(--medium-gray);white-space:nowrap}
+  .shm-sending{opacity:.65}`;
   document.head.appendChild(st);
 
   /* ── Ticks: 1 grey = sent, 2 grey = delivered, 2 green = read ── */
@@ -65,10 +77,12 @@
     MSGS[msg.id] = msg;
     const mine = msg.senderId === me();
     const q = msg.replyTo;
-    const quote = q && !msg.deleted ? `<span class="shm-quote" data-jump="${esc(q.id)}"><b>${esc(q.senderId === me() ? "You" : q.senderName || "Message")}</b>${q.deleted ? "<i>This message was deleted</i>" : esc(q.text || (q.type === "call" ? "Call" : ""))}</span>` : "";
+    const quote = q && !msg.deleted ? `<span class="shm-quote" data-jump="${esc(q.id)}"><b>${esc(q.senderId === me() ? "You" : q.senderName || "Message")}</b>${q.deleted ? "<i>This message was deleted</i>" : esc(q.text || (q.type === "call" ? "Call" : q.type === "photo" ? "📷 Photo" : ""))}</span>` : "";
     const body = msg.deleted
       ? `<span class="shm-del"><i class="fas fa-ban"></i> ${mine ? "You deleted this message" : "This message was deleted"}</span>`
-      : esc(msg.text);
+      : msg.photoUrl
+        ? `<img class="shm-photo" src="${esc(msg.photoUrl)}" alt="Photo" loading="lazy">${msg.text ? `<span class="shm-photo-cap">${esc(msg.text)}</span>` : ""}`
+        : esc(msg.text);
     return `<div class="shc-row ${mine ? "me" : "them"}" data-id="${esc(msg.id)}"><div class="shc-b">${mine ? "" : `<div class="shc-name">${esc(msg.senderName || "")}</div>`}${quote}${body}<div class="shc-time">${msg.edited && !msg.deleted ? '<span class="shm-edited">edited</span>' : ""}${shcTime(msg.createdAt)}${ticks(msg)}</div>${msg.deleted ? "" : '<button type="button" class="shm-more" aria-label="Message options"><i class="fas fa-ellipsis-v"></i></button>'}</div></div>`;
   }
   function install() {
@@ -109,7 +123,8 @@
     const m = menu();
     m.innerHTML = `<button type="button" data-a="reply"><i class="fas fa-reply"></i> Reply</button>
       ${msg.text ? '<button type="button" data-a="copy"><i class="far fa-copy"></i> Copy</button>' : ""}
-      ${canEdit(msg) ? '<button type="button" data-a="edit"><i class="fas fa-pen"></i> Edit</button>' : ""}
+      ${canEdit(msg) ? `<button type="button" data-a="edit"><i class="fas fa-pen"></i> ${msg.type === "photo" ? "Edit caption" : "Edit"}</button>` : ""}
+      ${msg.photoUrl ? '<button type="button" data-a="view"><i class="far fa-image"></i> View photo</button>' : ""}
       <button type="button" data-a="delme"><i class="far fa-trash-alt"></i> Delete for me</button>
       ${mine && !msg.system ? '<button type="button" class="danger" data-a="delall"><i class="fas fa-trash-alt"></i> Delete for everyone</button>' : ""}`;
     m.onclick = (e) => { const b = e.target.closest("button"); if (!b) return; m.classList.remove("on"); act(b.dataset.a, msg); };
@@ -120,6 +135,7 @@
   }
   async function act(a, msg) {
     if (a === "reply") { S.edit = null; S.reply = msg; showBar(); focusInput(); }
+    else if (a === "view") { try { openImageModal(msg.photoUrl); } catch (e) { window.open(msg.photoUrl, "_blank"); } }
     else if (a === "copy") { try { await navigator.clipboard.writeText(msg.text); notify("Message copied", "success"); } catch (e) { prompt("Copy the message:", msg.text); } }
     else if (a === "edit") { S.reply = null; S.edit = msg; const i = $("chat-input"); i.value = msg.text; showBar(); focusInput(); i.dispatchEvent(new Event("input")); }
     else if (a === "delme") {
@@ -136,6 +152,8 @@
   }
   // Tap a bubble (phones) or the ⋯ button; long-press also works
   document.addEventListener("click", (e) => {
+    const ph = e.target.closest("#chat-messages .shm-photo");
+    if (ph) { e.stopPropagation(); try { openImageModal(ph.src); } catch (err) { window.open(ph.src, "_blank"); } return; }
     const jump = e.target.closest(".shm-quote");
     if (jump) { e.stopPropagation(); return jumpTo(jump.dataset.jump); }
     const b = e.target.closest("#chat-messages .shc-b");
@@ -168,7 +186,7 @@
     const m = S.edit || S.reply;
     if (!m) { b.classList.remove("on"); b.innerHTML = ""; return; }
     b.innerHTML = `<i class="fas ${S.edit ? "fa-pen" : "fa-reply"}" style="color:var(--primary)"></i>
-      <div class="shm-bt"><b>${S.edit ? "Editing message" : `Replying to ${esc(m.senderId === me() ? "yourself" : m.senderName || "")}`}</b><span>${esc(m.text || (m.type === "call" ? "Call" : ""))}</span></div>
+      <div class="shm-bt"><b>${S.edit ? "Editing message" : `Replying to ${esc(m.senderId === me() ? "yourself" : m.senderName || "")}`}</b><span>${esc(m.text || (m.type === "call" ? "Call" : m.type === "photo" ? "📷 Photo" : ""))}</span></div>
       <button type="button" aria-label="Cancel">&times;</button>`;
     b.querySelector("button").onclick = cancelBar;
     b.classList.add("on");
@@ -181,7 +199,8 @@
   async function send() {
     const input = $("chat-input"); if (!input) return;
     const text = input.value.trim();
-    if (!text || sending) return;
+    if (sending) return;
+    if (!text && !S.photos.length && !(S.edit && S.edit.type === "photo")) return;
     try { if (!requireLogin()) return; } catch (e) {}
     const cid = convId();
     if (!cid) { notify("Select a conversation first", "info"); return; }
@@ -193,6 +212,7 @@
         redraw(d.message); input.value = ""; input.style.height = ""; S.edit = null; showBar();
         return;
       }
+      if (S.photos.length) { await sendPhotos(cid, text); return; }
       const body = { text }; if (S.reply) body.replyTo = S.reply.id;
       const d = await api(`/chat/conversations/${cid}/messages`, { method: "POST", body: JSON.stringify(body) });
       if (!d.success) { notify(d.message || "Failed to send message", "error"); return; }
@@ -206,6 +226,73 @@
     if (btn && !btn.__shm) { const clone = btn.cloneNode(true); clone.__shm = true; btn.parentNode.replaceChild(clone, btn); clone.addEventListener("click", (e) => { e.preventDefault(); send(); }); }
     try { handleSendMessage = send; } catch (e) {} window.handleSendMessage = send;
   }
+
+  /* ── Photos: pick (gallery or camera), preview, send ── */
+  function photoStrip() {
+    let p = $("shm-photos");
+    if (!p) { const b = bar(); if (!b) return null; p = document.createElement("div"); p.id = "shm-photos"; b.parentNode.insertBefore(p, b); }
+    return p;
+  }
+  function renderPhotos() {
+    const p = photoStrip(); if (!p) return;
+    if (!S.photos.length) { p.classList.remove("on"); p.innerHTML = ""; return; }
+    p.innerHTML = S.photos.map((d, i) => `<div class="shm-pv"><img src="${d}" alt="Photo ${i + 1}"><button type="button" aria-label="Remove photo" data-i="${i}">&times;</button></div>`).join("")
+      + `<span class="shm-pv-note">${S.photos.length} photo${S.photos.length > 1 ? "s" : ""} ready · add a caption, then send</span>`;
+    p.querySelectorAll("button").forEach((b) => { b.onclick = () => { S.photos.splice(Number(b.dataset.i), 1); renderPhotos(); }; });
+    p.classList.add("on");
+  }
+  async function addPhotos(files) {
+    const room = MAX_PHOTOS - S.photos.length;
+    const list = Array.from(files || []).slice(0, room);
+    if ((files || []).length > room) notify(`Up to ${MAX_PHOTOS} photos at a time.`, "info");
+    for (const f of list) {
+      try { S.photos.push(await shCompress(f, 1600, 0.78)); } catch (e) { notify(`Skipped ${esc(f.name)}: not a photo`, "warning"); }
+    }
+    renderPhotos();
+    if (S.photos.length) focusInput();
+  }
+  function hookAttach() {
+    const send = $("send-message"); if (!send || $("shm-attach")) return;
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.id = "shm-attach"; btn.className = "shm-attach"; btn.title = "Send a photo"; btn.setAttribute("aria-label", "Send a photo");
+    btn.innerHTML = '<i class="fas fa-camera"></i>';
+    const file = document.createElement("input");
+    file.type = "file"; file.accept = "image/*"; file.multiple = true; file.hidden = true; file.id = "shm-file";
+    btn.onclick = () => { if (!convId()) { notify("Select a conversation first", "info"); return; } if (S.edit) cancelBar(); file.click(); };
+    file.onchange = () => { addPhotos(file.files); file.value = ""; };
+    const input = $("chat-input");
+    input.parentNode.insertBefore(btn, input);
+    input.parentNode.appendChild(file);
+    // the photo button follows the message box (disabled until a chat is open)
+    const sync = () => { btn.disabled = input.disabled; };
+    new MutationObserver(sync).observe(input, { attributes: true, attributeFilter: ["disabled"] }); sync();
+  }
+  async function sendPhotos(cid, caption) {
+    const input = $("chat-input");
+    const photos = S.photos.slice(); const replyTo = S.reply ? S.reply.id : null;
+    S.photos = []; renderPhotos(); S.reply = null; showBar();
+    input.value = ""; input.style.height = "";
+    let failed = 0;
+    for (let i = 0; i < photos.length; i++) {
+      const msgs = $("chat-messages");
+      const tmp = document.createElement("div");
+      tmp.className = "shc-row me shm-sending";
+      tmp.innerHTML = `<div class="shc-b"><img class="shm-photo" src="${photos[i]}" alt=""><div class="shc-time"><i class="fas fa-spinner fa-spin"></i> Sending…</div></div>`;
+      msgs.appendChild(tmp); try { shcScrollBottom(); } catch (e) {}
+      const body = { image: photos[i], text: i === 0 ? caption : "" };
+      if (i === 0 && replyTo) body.replyTo = replyTo;
+      const d = await api(`/chat/conversations/${cid}/messages`, { method: "POST", body: JSON.stringify(body) });
+      tmp.remove();
+      if (d.success) appendMessage(d.message, true); else failed++;
+    }
+    if (failed) notify(`${failed} photo${failed > 1 ? "s" : ""} could not be sent. Please try again.`, "error");
+  }
+  // Drop or paste a photo into the chat on a computer
+  document.addEventListener("paste", (e) => {
+    if (!document.querySelector("#chat.active") || !convId()) return;
+    const files = Array.from((e.clipboardData || {}).files || []).filter((f) => /^image\//.test(f.type));
+    if (files.length) { e.preventDefault(); addPhotos(files); }
+  });
 
   /* ── Live updates from the other person ── */
   function hookSocket() {
@@ -250,12 +337,12 @@
   function hookOpen() {
     const orig = window.openConversation;
     if (typeof orig !== "function" || orig.__shm) return;
-    const wrapped = function () { S.reply = null; S.edit = null; showBar(); return orig.apply(this, arguments); };
+    const wrapped = function () { S.reply = null; S.edit = null; S.photos = []; showBar(); renderPhotos(); return orig.apply(this, arguments); };
     Object.keys(orig).forEach((k) => { wrapped[k] = orig[k]; });
     wrapped.__shm = true;
     window.openConversation = wrapped; try { openConversation = wrapped; } catch (e) {}
   }
 
-  function start() { install(); hookSend(); hookOpen(); hookSocket(); setInterval(hookSocket, 2000); }
+  function start() { install(); hookSend(); hookAttach(); hookOpen(); hookSocket(); setInterval(hookSocket, 2000); }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => setTimeout(start, 0)); else start();
 })();
