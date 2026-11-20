@@ -49,6 +49,9 @@
   #shm-bar button{border:0;background:none;font-size:1.3rem;color:var(--medium-gray);cursor:pointer;line-height:1}
   .shm-photo{display:block;max-width:240px;width:100%;max-height:300px;object-fit:cover;border-radius:10px;margin:2px 0 4px;cursor:zoom-in;background:rgba(0,0,0,.08);min-height:120px}
   .shm-photo-cap{display:block;margin-top:2px}
+  .shm-pwrap{position:relative;display:block}
+  .shm-pmore{position:absolute;top:6px;right:6px;width:32px;height:32px;border-radius:50%;border:0;background:rgba(0,0,0,.55);color:#fff;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:1rem;line-height:1;padding:0}
+  .shm-pmore:hover{background:rgba(0,0,0,.75)}
   .shm-attach{width:44px;height:44px;flex:0 0 44px;border-radius:50%;border:1.5px solid var(--light-gray);background:var(--white);color:var(--primary);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:1.1rem;padding:0}
   .shm-attach:disabled{opacity:.5;cursor:default}
   #shm-photos{display:none;gap:8px;padding:8px 12px;border-top:1px solid var(--light-gray);background:var(--light);overflow-x:auto}
@@ -81,7 +84,7 @@
     const body = msg.deleted
       ? `<span class="shm-del"><i class="fas fa-ban"></i> ${mine ? "You deleted this message" : "This message was deleted"}</span>`
       : msg.photoUrl
-        ? `<img class="shm-photo" src="${esc(msg.photoUrl)}" alt="Photo" loading="lazy">${msg.text ? `<span class="shm-photo-cap">${esc(msg.text)}</span>` : ""}`
+        ? `<span class="shm-pwrap"><img class="shm-photo" src="${esc(msg.photoUrl)}" alt="Photo" loading="lazy"><button type="button" class="shm-pmore" aria-label="Photo options: reply, delete"><span aria-hidden="true">⋮</span></button></span>${msg.text ? `<span class="shm-photo-cap">${esc(msg.text)}</span>` : ""}`
         : esc(msg.text);
     return `<div class="shc-row ${mine ? "me" : "them"}" data-id="${esc(msg.id)}"><div class="shc-b">${mine ? "" : `<div class="shc-name">${esc(msg.senderName || "")}</div>`}${quote}${body}<div class="shc-time">${msg.edited && !msg.deleted ? '<span class="shm-edited">edited</span>' : ""}${shcTime(msg.createdAt)}${ticks(msg)}</div>${msg.deleted ? "" : '<button type="button" class="shm-more" aria-label="Message options"><i class="fas fa-ellipsis-v"></i></button>'}</div></div>`;
   }
@@ -152,6 +155,15 @@
   }
   // Tap a bubble (phones) or the ⋯ button; long-press also works
   document.addEventListener("click", (e) => {
+    const pm = e.target.closest("#chat-messages .shm-pmore");
+    if (pm) {
+      e.stopPropagation();
+      if (Date.now() - lastLongPress < 600) return;
+      const row = pm.closest(".shc-row"); const r = pm.getBoundingClientRect();
+      if (row && row.dataset.id) openMenu(row.dataset.id, r.left - 160, r.bottom + 4);
+      return;
+    }
+    if (Date.now() - lastLongPress < 600) return; // the long-press already opened the menu
     const ph = e.target.closest("#chat-messages .shm-photo");
     if (ph) { e.stopPropagation(); try { openImageModal(ph.src); } catch (err) { window.open(ph.src, "_blank"); } return; }
     const jump = e.target.closest(".shm-quote");
@@ -163,6 +175,25 @@
     const r = b.getBoundingClientRect();
     openMenu(row.dataset.id, row.classList.contains("me") ? r.left - 150 : r.right - 40, r.top + 10);
   });
+  // Long-press a message or photo (phones) to open the same menu
+  let lastLongPress = 0, pressTimer = null, pressStart = null;
+  document.addEventListener("touchstart", (e) => {
+    const b = e.target.closest("#chat-messages .shc-b"); if (!b) return;
+    const row = b.closest(".shc-row"); if (!row || !row.dataset.id) return;
+    const t = e.touches[0]; pressStart = { x: t.clientX, y: t.clientY };
+    clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => {
+      lastLongPress = Date.now();
+      try { navigator.vibrate && navigator.vibrate(15); } catch (err) {}
+      openMenu(row.dataset.id, pressStart.x - 90, pressStart.y + 8);
+    }, 480);
+  }, { passive: true });
+  const cancelPress = () => clearTimeout(pressTimer);
+  document.addEventListener("touchmove", (e) => { if (!pressStart) return; const t = e.touches[0]; if (Math.abs(t.clientX - pressStart.x) > 10 || Math.abs(t.clientY - pressStart.y) > 10) cancelPress(); }, { passive: true });
+  document.addEventListener("touchend", cancelPress, { passive: true });
+  document.addEventListener("touchcancel", cancelPress, { passive: true });
+  document.addEventListener("contextmenu", (e) => { if (e.target.closest("#chat-messages .shc-b") && Date.now() - lastLongPress < 1500) e.preventDefault(); });
+
   function jumpTo(id) {
     const row = document.querySelector(`#chat-messages .shc-row[data-id="${CSS.escape(id)}"]`);
     if (!row) return notify("That message is no longer in this chat.", "info");
