@@ -93,7 +93,11 @@ router.get("/:uid", optionalAuth, async (req, res) => {
   try {
     const doc = await firebase.db.collection(firebase.COLLECTIONS.USERS).doc(req.params.uid).get();
     if (!doc.exists) return res.status(404).json({ success: false, message: "User not found" });
-    const { passwordHash, email, phone, ...publicProfile } = doc.data();
+    // Only what a public profile needs: never passwords, contacts, tokens or internal flags
+    const u = doc.data();
+    const PUBLIC = ["uid", "name", "role", "roles", "county", "subcounty", "bio", "skills", "rating", "reviewCount", "completedJobs", "createdAt", "providerSince", "emailVerified", "hasAvatar", "avatar", "avatarUpdatedAt", "verified"];
+    const publicProfile = {};
+    PUBLIC.forEach((k) => { if (u[k] !== undefined) publicProfile[k] = u[k]; });
     return res.json({ success: true, user: publicProfile });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Could not fetch user" });

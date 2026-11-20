@@ -6,7 +6,7 @@
 const express = require("express");
 const router = express.Router();
 const firebase = require("../config/firebase");
-const { verifyJWT } = require("../middleware/auth");
+const { verifyJWT, forgetSession } = require("../middleware/auth");
 const { isAdminUser, ADMIN_PHONES } = require("../utils/admin");
 const { rolesOf, activeRoleOf, PROVIDER } = require("../utils/roles");
 
@@ -150,6 +150,8 @@ router.patch("/users/:uid", async (req, res) => {
       if (!b.provider && u.role === PROVIDER) updates.role = "client";
     }
     await ref.update(updates);
+    forgetSession(req.params.uid); // a suspension takes effect on the very next request
+    if (updates.active === false && global.io) global.io.in(`user:${req.params.uid}`).disconnectSockets(true);
     res.json({ success: true, user: publicUser({ ...u, ...updates }) });
   } catch (e) {
     console.error("Admin update user error:", e);

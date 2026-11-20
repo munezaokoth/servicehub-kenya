@@ -8,9 +8,12 @@ const { body, validationResult } = require("express-validator");
 const bcrypt = require("bcryptjs");
 const { v4: uuidv4 } = require("uuid");
 const router = express.Router();
+// A real bcrypt hash used to keep "no such email" as slow as "wrong password"
+const DUMMY_HASH = "$2a$12$PvMy5CqJpz.7.QkU3SLed.SGqzNF6XwAmTo8KOWlutbZEDCTH1/uy";
 
 const { db, auth, COLLECTIONS } = require("../config/firebase");
-const { generateToken, verifyJWT } = require("../middleware/auth");
+const { generateToken, verifyJWT, revokeSessions } = require("../middleware/auth");
+const { loginBlocked, loginFailed, loginOk, resetAllowed } = require("../middleware/security");
 const { sendWelcomeEmail, sendPasswordResetEmail } = require("../services/email");
 const { rolesOf, activeRoleOf, PROVIDER } = require("../utils/roles");
 const { isAdminUser } = require("../utils/admin");
@@ -199,11 +202,15 @@ router.post("/login", keepRawEmail, loginValidation, async (req, res) => {
   if (err) return;
 
   const { email, password } = req.body;
+  const lockedMin = loginBlocked(req.rawEmail || email);
+  if (lockedMin) return res.status(429).json({ success: false, code: "LOCKED", message: `Too many wrong passwords. Try again in ${lockedMin} minute${lockedMin > 1 ? "s" : ""}, or reset your password.` });
 
   try {
     // Get user from Firestore
     const snap = await findUserByEmail(email, req.rawEmail);
     if (snap.empty) {
+      await bcrypt.compare(String(password || ""), DUMMY_HASH); // same time as a real check, so emails can't be probed
+      loginFailed(req.rawEmail || email);
       return res.status(401).json({ success: false, message: "Invalid email or password" });
     }
 
@@ -215,7 +222,10 @@ router.post("/login", keepRawEmail, loginValidation, async (req, res) => {
       valid = true;
       const passwordHash = await bcrypt.hash(password, 12);
       await db.collection(COLLECTIONS.USERS).doc(userData.uid).update({ passwordHash, updatedAt: new Date().toISOString() });
+      // The password was reset by email: sign out every other device
+      if (userData.passwordHash) await revokeSessions(userData.uid).catch(() => {});
     }
+    if (!valid) loginFailed(req.rawEmail || email); else loginOk(req.rawEmail || email);
     if (!valid) {
       if (!userData.passwordHash && userData.authProvider) {
         return res.status(401).json({ success: false, message: "This account uses Google/Facebook sign-in. Use that button, or reset your password to set one." });
@@ -267,6 +277,9 @@ router.post("/password-reset", keepRawEmail, body("email").isEmail().normalizeEm
   if (err) return;
 
   let { email } = req.body;
+  if (!resetAllowed(req.rawEmail || email)) {
+    return res.json({ success: true, message: "If this email is registered, a reset link has been sent. Check your inbox and spam folder." });
+  }
 
   try {
     // Check user exists
@@ -323,12 +336,13 @@ router.put("/profile", verifyJWT, async (req, res) => {
   const { name, phone, county, subcounty, bio, skills } = req.body;
   try {
     const updates = { updatedAt: new Date().toISOString() };
-    if (name) updates.name = name;
-    if (phone) updates.phone = phone;
-    if (county) updates.county = county;
-    if (subcounty) updates.subcounty = subcounty;
-    if (bio !== undefined) updates.bio = bio;
-    if (skills) updates.skills = skills;
+    const txt = (v, n) => String(v).replace(/\s+/g, " ").trim().slice(0, n);
+    if (name) { updates.name = txt(name, 80); if (updates.name.length < 2) return res.status(422).json({ success: false, message: "Name must be at least 2 characters" }); }
+    if (phone) { updates.phone = txt(phone, 20); if (!/^\+?[0-9 ()-]{9,20}$/.test(updates.phone)) return res.status(422).json({ success: false, message: "Enter a valid phone number" }); }
+    if (county) updates.county = txt(county, 40);
+    if (subcounty) updates.subcounty = txt(subcounty, 60);
+    if (bio !== undefined) updates.bio = String(bio || "").trim().slice(0, 500);
+    if (skills) updates.skills = (Array.isArray(skills) ? skills : String(skills).split(",")).map((x) => txt(x, 60)).filter(Boolean).slice(0, 20);
 
     await db.collection(COLLECTIONS.USERS).doc(req.user.uid).update(updates);
     return res.json({ success: true, message: "Profile updated successfully" });
@@ -374,10 +388,28 @@ router.post("/change-password", verifyJWT, async (req, res) => {
     }
     const passwordHash = await bcrypt.hash(newPassword, 12);
     await ref.update({ passwordHash, passwordChangedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-    return res.json({ success: true, message: "Password changed. Use your new password next time you sign in." });
+    // Every other device is signed out; this one gets a fresh session
+    await revokeSessions(u.uid);
+    const token = generateToken({ uid: u.uid, email: u.email, name: u.name, role: activeRoleOf(u), roles: rolesOf(u) });
+    return res.json({ success: true, token, message: "Password changed. Other devices have been signed out." });
   } catch (error) {
     console.error("Change password error:", error);
     return res.status(500).json({ success: false, message: "Could not change your password. Please try again." });
+  }
+});
+
+// POST /api/auth/logout-all: sign out every device (e.g. a lost phone). This device gets a fresh session.
+router.post("/logout-all", verifyJWT, async (req, res) => {
+  try {
+    const doc = await db.collection(COLLECTIONS.USERS).doc(req.user.uid).get();
+    if (!doc.exists) return res.status(404).json({ success: false, message: "User not found" });
+    const u = doc.data();
+    await revokeSessions(u.uid);
+    const token = generateToken({ uid: u.uid, email: u.email, name: u.name, role: activeRoleOf(u), roles: rolesOf(u) });
+    return res.json({ success: true, token, message: "Signed out of all other devices." });
+  } catch (e) {
+    console.error("Logout-all error:", e);
+    return res.status(500).json({ success: false, message: "Could not sign out other devices. Please try again." });
   }
 });
 

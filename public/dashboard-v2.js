@@ -4,6 +4,8 @@
    Loaded after the main script: these function declarations replace the older ones. */
 
 const shEsc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// Text going into onclick="fn('…')": drop quotes and backslashes first, then HTML-escape
+const shArg = (v) => shEsc(String(v == null ? "" : v).replace(/['"\\`]/g, "").replace(/[\r\n]+/g, " "));
 const shKES = (n) => "KES " + Number(n || 0).toLocaleString("en-KE");
 const shDate = (d) => (d ? new Date(d).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" }) : "");
 const SH_STATUS = {
@@ -81,6 +83,13 @@ async function shApi(path, opts = {}) {
   const res = await fetch(`${API_BASE}${path}`, { ...opts, headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}`, ...(opts.headers || {}) } });
   const data = await res.json().catch(() => ({ success: false, message: `Server error (${res.status})` }));
   return data;
+}
+
+// After a password change or "sign out everywhere": keep this device signed in with its fresh token
+function shUseNewToken(token) {
+  if (!token) return;
+  setToken(token);
+  try { if (typeof socket !== "undefined" && socket) { socket.auth = { token }; socket.disconnect(); socket.connect(); } } catch (e) {}
 }
 
 /* ---------- sign in / sign up ---------- */
@@ -196,7 +205,7 @@ function shJobCard(job) {
       acts.push(`<button class="sh-btn ok" onclick="markJobCompleted('${job.id}')"><i class="fas fa-check"></i> Mark as Completed</button>`);
     }
     if ((job.photos || []).length < SH_MAX_PHOTOS) acts.push(`<label class="sh-btn ghost" style="cursor:pointer"><input type="file" accept="image/*" multiple hidden onchange="shAddJobPhotos('${job.id}', this)"><i class="fas fa-camera"></i> Add Photos</label>`);
-    if (job.conversationId) acts.push(`<button class="sh-btn ghost" onclick="openJobChat('${job.conversationId}','${shEsc(job.assignedProviderName || "Provider").replace(/'/g, "")}')"><i class="fas fa-comments"></i> Job Chat</button>`);
+    if (job.conversationId) acts.push(`<button class="sh-btn ghost" onclick="openJobChat('${job.conversationId}','${shArg(job.assignedProviderName || "Provider")}')"><i class="fas fa-comments"></i> Job Chat</button>`);
     acts.push(`<button class="sh-btn ghost" onclick="shPinJob('${job.id}')"><i class="fas fa-map-marker-alt" style="color:#e53935"></i> ${job.location ? "Location pinned · change" : "Pin location"}</button>`);
     if (job.status === "open") acts.push(`<button class="sh-btn danger" onclick="cancelJob('${job.id}')"><i class="fas fa-times"></i> Cancel Job</button>`);
   }
@@ -319,7 +328,7 @@ async function loadMyAssignedJobs(opts = {}) {
       ${completedJobs.map((job) => `<div class="sh-job"><div class="sh-job-top"><div><h3>${shEsc(job.title)}</h3><div class="sh-meta"><span><i class="fas fa-map-marker-alt"></i> ${shEsc(job.county)}${job.subcounty ? ", " + shEsc(job.subcounty) : ""}</span>
         <span><i class="fas fa-money-bill-wave"></i> ${shKES(job.acceptedAmount || job.budgetMin)}</span><span><i class="fas fa-user"></i> ${shEsc(job.clientName || "Client")}</span>${job.completedAt ? `<span><i class="far fa-calendar-check"></i> ${shDate(job.completedAt)}</span>` : ""}</div></div>${shChip(SH_STATUS, job.status)}</div>
         <div class="sh-actions"><button class="sh-btn ghost" onclick="openTrack('${job.id}')"><i class="fas fa-route"></i> Job history</button>
-        ${job.conversationId ? `<button class="sh-btn ghost" onclick="openJobChat('${job.conversationId}','${shEsc(job.clientName || "Client").replace(/'/g, "")}')"><i class="fas fa-comments"></i> Chat</button>` : ""}</div></div>`).join("") || `<div class="sh-job"><div class="sh-loading">No completed jobs yet. Jobs you finish appear here.</div></div>`}`;
+        ${job.conversationId ? `<button class="sh-btn ghost" onclick="openJobChat('${job.conversationId}','${shArg(job.clientName || "Client")}')"><i class="fas fa-comments"></i> Chat</button>` : ""}</div></div>`).join("") || `<div class="sh-job"><div class="sh-loading">No completed jobs yet. Jobs you finish appear here.</div></div>`}`;
     return;
   }
   const jobs = shAssignedView === "progress" ? allJobs.filter((j) => ["in-progress", "pending-completion"].includes(j.status)) : allJobs.filter((j) => j.status !== "completed");
@@ -344,7 +353,7 @@ async function loadMyAssignedJobs(opts = {}) {
         ${job.plannedStartDate ? `<div class="sh-meta" style="margin-top:4px"><span><i class="far fa-calendar-check"></i> Start date ${shDate(job.plannedStartDate)}</span></div>` : ""}</div>${shChip(SH_STATUS, job.status)}</div>
       <div class="sh-actions">${job.status === "in-progress" ? `<button class="sh-btn ok" onclick="requestJobCompletion('${job.id}')"><i class="fas fa-check"></i> Mark Complete</button>` : `<span class="sh-empty"><i class="fas fa-clock"></i> Waiting for the client to confirm completion</span>`}
         <button class="sh-btn ghost" onclick="openTrack('${job.id}')"><i class="fas fa-route"></i> Track &amp; Update</button>${mapBtn(job)}
-        ${job.conversationId ? `<button class="sh-btn ghost" onclick="openJobChat('${job.conversationId}','${shEsc(job.clientName || "Client").replace(/'/g, "")}')"><i class="fas fa-comments"></i> Job Chat</button>` : ""}</div>${shPhotoStrip(job)}</div>`).join("")}
+        ${job.conversationId ? `<button class="sh-btn ghost" onclick="openJobChat('${job.conversationId}','${shArg(job.clientName || "Client")}')"><i class="fas fa-comments"></i> Job Chat</button>` : ""}</div>${shPhotoStrip(job)}</div>`).join("")}
     ${!jobs.length ? `<div class="sh-job"><div class="sh-loading">No jobs yet. Send quotes on open jobs. When a client accepts your quote, the offer appears here for you to accept.</div></div>` : ""}`;
 }
 async function providerAcceptJob(jobId) {
@@ -452,7 +461,12 @@ function accountPasswordReset() {
         <label style="display:flex;gap:8px;align-items:center;font-size:.9rem;margin:4px 0 14px"><input type="checkbox" id="sh-cpw-show"> Show passwords</label>
         <button type="submit" class="btn btn-primary btn-block" id="sh-cpw-go"><i class="fas fa-check"></i> Change Password</button>
         <div style="text-align:center;margin-top:14px;font-size:.9rem"><a href="#" id="sh-cpw-forgot">Forgot your current password? Email me a reset link</a></div>
-      </form></div></div>`;
+      </form>
+      <div style="border-top:1px solid var(--light-gray);margin-top:18px;padding-top:16px">
+        <b style="font-size:.95rem">Lost a phone, or signed in somewhere you don't trust?</b>
+        <p style="color:var(--medium-gray);font-size:.86rem;margin:6px 0 10px">Sign out ServiceHub on every other phone and computer. You stay signed in here.</p>
+        <button type="button" class="btn btn-outline btn-block" id="sh-logout-all"><i class="fas fa-sign-out-alt"></i> Sign out of all other devices</button>
+      </div></div></div>`;
     document.body.appendChild(m);
     m.addEventListener("click", (e) => { if (e.target === m) m.classList.remove("active"); });
     m.querySelector("#sh-cpw-show").onchange = (e) => m.querySelectorAll("input[type=password],input[data-pw]").forEach((i) => { i.type = e.target.checked ? "text" : "password"; i.dataset.pw = "1"; });
@@ -465,10 +479,20 @@ function accountPasswordReset() {
       const d = await shApi("/auth/change-password", { method: "POST", body: JSON.stringify({ currentPassword: cur, newPassword: nw }) }).catch(() => ({ success: false, message: "Connection error. Please try again." }));
       btn.disabled = false;
       if (!d.success) { showNotification(d.message || "Could not change your password", "error"); return; }
+      if (d.token) shUseNewToken(d.token); // other devices were signed out; this one continues
       m.classList.remove("active");
       m.querySelector("#sh-cpw-form").reset();
       showNotification(d.message || "Password changed.", "success");
     });
+    m.querySelector("#sh-logout-all").onclick = async () => {
+      if (!confirm("Sign out ServiceHub on all your other phones and computers?")) return;
+      const b = m.querySelector("#sh-logout-all"); b.disabled = true;
+      const d = await shApi("/auth/logout-all", { method: "POST" }).catch(() => ({ success: false, message: "Connection error. Please try again." }));
+      b.disabled = false;
+      if (!d.success) { showNotification(d.message || "Could not sign out other devices", "error"); return; }
+      shUseNewToken(d.token);
+      showNotification(d.message || "Signed out of all other devices.", "success");
+    };
     m.querySelector("#sh-cpw-forgot").onclick = async (e) => {
       e.preventDefault();
       const email = currentUser && currentUser.email;
@@ -844,7 +868,7 @@ async function openTrack(jobId) {
     ${canUpdate ? `<div style="margin-bottom:16px">${quick}
       <textarea id="track-note" maxlength="300" placeholder="${isProvider ? "Add a progress note for the client (optional)..." : "Add a note for the provider..."}"></textarea>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;flex-wrap:wrap">
-        ${job.conversationId ? `<button class="sh-btn ghost" onclick="closeTrack();openJobChat('${job.conversationId}','${shEsc(isProvider ? job.clientName || "Client" : job.assignedProviderName || "Provider").replace(/'/g, "")}')"><i class="fas fa-comments"></i> Job Chat</button>` : ""}
+        ${job.conversationId ? `<button class="sh-btn ghost" onclick="closeTrack();openJobChat('${job.conversationId}','${shArg(isProvider ? job.clientName || "Client" : job.assignedProviderName || "Provider")}')"><i class="fas fa-comments"></i> Job Chat</button>` : ""}
         <button class="sh-btn pri" onclick="postTrackUpdate('${job.id}','note')"><i class="fas fa-paper-plane"></i> Post Note</button>
         ${isProvider && job.status === "in-progress" ? `<button class="sh-btn ok" onclick="closeTrack();requestJobCompletion('${job.id}')"><i class="fas fa-check"></i> Work Done</button>` : ""}
       </div></div>` : ""}

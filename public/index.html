@@ -4954,7 +4954,7 @@ window.addEventListener('storage', (e) => {
                 if (loginNavLink) loginNavLink.style.display = 'none';
                 if (userMenuBtn) {
                     userMenuBtn.style.display = 'flex';
-                    userMenuBtn.innerHTML = `<i class="fas fa-user-circle"></i> ${currentUser.name}`;
+                    userMenuBtn.innerHTML = `<i class="fas fa-user-circle"></i> ${escapeHtml(currentUser.name)}`;
                 }
                 if (dashboardNavLink) dashboardNavLink.style.display = 'block';
             } else {
@@ -5155,15 +5155,15 @@ function renderJobs(jobs = []) {
                         <span style="background:var(--gradient-primary);color:#fff;padding:4px 12px;border-radius:20px;font-size:0.8rem;font-weight:600;text-transform:capitalize;">${job.category || 'General'}</span>
                         <span style="background:${job.status==='open'?'#e8f5e9':'#fff3e0'};color:${job.status==='open'?'#2e7d32':'#e65100'};padding:4px 12px;border-radius:20px;font-size:0.8rem;font-weight:600;text-transform:capitalize;">${job.status}</span>
                     </div>
-                    <h3 style="color:var(--dark);margin-bottom:8px;font-size:1.1rem;">${job.title}</h3>
-                    <p style="color:var(--dark-gray);font-size:0.9rem;margin-bottom:16px;line-height:1.5;">${job.description ? job.description.slice(0,120) + (job.description.length > 120 ? '...' : '') : ''}</p>
+                    <h3 style="color:var(--dark);margin-bottom:8px;font-size:1.1rem;">${escapeHtml(job.title)}</h3>
+                    <p style="color:var(--dark-gray);font-size:0.9rem;margin-bottom:16px;line-height:1.5;">${job.description ? escapeHtml(job.description.slice(0,120)) + (job.description.length > 120 ? '...' : '') : ''}</p>
                     <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
-                        <span style="color:var(--dark-gray);font-size:0.85rem;"><i class="fas fa-map-marker-alt" style="color:var(--primary);margin-right:4px;"></i>${job.county}${job.subcounty ? ', ' + job.subcounty : ''}</span>
+                        <span style="color:var(--dark-gray);font-size:0.85rem;"><i class="fas fa-map-marker-alt" style="color:var(--primary);margin-right:4px;"></i>${escapeHtml(job.county)}${job.subcounty ? ', ' + escapeHtml(job.subcounty) : ''}</span>
                         <span style="color:var(--dark-gray);font-size:0.85rem;"><i class="fas fa-money-bill-wave" style="color:var(--success);margin-right:4px;"></i>KES ${Number(job.budgetMin).toLocaleString()} - ${Number(job.budgetMax).toLocaleString()}</span>
-                        <span style="color:var(--dark-gray);font-size:0.85rem;"><i class="fas fa-clock" style="color:var(--warning);margin-right:4px;"></i>${job.urgency}</span>
+                        <span style="color:var(--dark-gray);font-size:0.85rem;"><i class="fas fa-clock" style="color:var(--warning);margin-right:4px;"></i>${escapeHtml(job.urgency)}</span>
                     </div>
                     <div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px;border-top:1px solid var(--light-gray);">
-                        <span style="color:var(--medium-gray);font-size:0.8rem;"><i class="fas fa-user" style="margin-right:4px;"></i>${job.clientName || 'Client'} &bull; ${job.quotesCount || 0} quotes</span>
+                        <span style="color:var(--medium-gray);font-size:0.8rem;"><i class="fas fa-user" style="margin-right:4px;"></i>${escapeHtml(job.clientName || 'Client')} &bull; ${job.quotesCount || 0} quotes</span>
                         <button class="btn btn-primary" style="padding:8px 18px;font-size:0.85rem;" onclick="handleViewJob('${job.id}')">View & Quote</button>
                     </div>
                 </div>
@@ -5182,7 +5182,7 @@ function renderJobs(jobs = []) {
                     document.getElementById('detail-job-category').textContent = job.category;
                     document.getElementById('detail-job-price').textContent = `KES ${Number(job.budgetMin).toLocaleString()} - ${Number(job.budgetMax).toLocaleString()}`;
                     document.getElementById('detail-job-description').textContent = job.description;
-                    document.getElementById('detail-job-location').textContent = `${job.county}${job.subcounty ? ', ' + job.subcounty : ''}`;
+                    document.getElementById('detail-job-location').textContent = `${escapeHtml(job.county)}${job.subcounty ? ', ' + escapeHtml(job.subcounty) : ''}`;
                     document.getElementById('detail-job-time').textContent = new Date(job.createdAt).toLocaleDateString('en-KE', {year:'numeric',month:'long',day:'numeric'});
                     document.getElementById('detail-job-client').textContent = job.clientName || 'Client';
                     document.getElementById('quote-job-id').value = jobId;
@@ -5367,11 +5367,14 @@ function renderJobs(jobs = []) {
             if (modal) modal.classList.remove('active');
         }
         
+        // Escape text before putting it into HTML (names, titles and messages come from other users)
+        function escapeHtml(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+        window.escapeHtml = escapeHtml;
         function showNotification(msg, type='info') {
             const container = document.getElementById('notification-container');
             const notif = document.createElement('div');
             notif.className = `notification ${type}`;
-            notif.innerHTML = `<div class="notification-content"><i class="fas fa-${type==='success'?'check-circle':type==='error'?'exclamation-circle':'info-circle'}"></i><span>${msg}</span></div><button class="notification-close">&times;</button>`;
+            notif.innerHTML = `<div class="notification-content"><i class="fas fa-${type==='success'?'check-circle':type==='error'?'exclamation-circle':'info-circle'}"></i><span>${escapeHtml(msg)}</span></div><button class="notification-close">&times;</button>`;
             container.appendChild(notif);
             notif.querySelector('.notification-close').onclick = () => notif.remove();
             setTimeout(() => notif.remove(), 5000);
@@ -5484,7 +5487,7 @@ function renderJobs(jobs = []) {
             });
 
             socket.on('new_quote', ({ jobTitle, quote }) => {
-                showNotification(`💼 New quote of KES ${Number(quote.amount).toLocaleString()} on "${jobTitle}" from ${quote.providerName}`, 'success');
+                showNotification(`💼 New quote of KES ${Number(quote.amount).toLocaleString()} on "${jobTitle}" from ${escapeHtml(quote.providerName)}`, 'success');
                 loadDashboardStats();
             });
 
@@ -5530,8 +5533,8 @@ function renderJobs(jobs = []) {
             div.style.cssText = `display:flex;justify-content:${isMine ? 'flex-end' : 'flex-start'};margin-bottom:12px;padding:0 16px;`;
             div.innerHTML = `
                 <div style="max-width:70%;">
-                    ${!isMine ? `<div style="font-size:0.75rem;color:var(--medium-gray);margin-bottom:4px;">${msg.senderName}</div>` : ''}
-                    <div style="background:${isMine ? 'var(--primary)' : 'var(--white)'};color:${isMine ? '#fff' : 'var(--dark)'};padding:10px 14px;border-radius:${isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px'};box-shadow:var(--shadow);font-size:0.9rem;line-height:1.4;">${msg.text}</div>
+                    ${!isMine ? `<div style="font-size:0.75rem;color:var(--medium-gray);margin-bottom:4px;">${escapeHtml(msg.senderName)}</div>` : ''}
+                    <div style="background:${isMine ? 'var(--primary)' : 'var(--white)'};color:${isMine ? '#fff' : 'var(--dark)'};padding:10px 14px;border-radius:${isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px'};box-shadow:var(--shadow);font-size:0.9rem;line-height:1.4;">${escapeHtml(msg.text)}</div>
                     <div style="font-size:0.72rem;color:var(--medium-gray);margin-top:3px;text-align:${isMine ? 'right' : 'left'};">${new Date(msg.createdAt || Date.now()).toLocaleTimeString('en-KE', {hour:'2-digit',minute:'2-digit'})}</div>
                 </div>`;
             msgsEl.appendChild(div);
@@ -5671,14 +5674,14 @@ function renderJobs(jobs = []) {
                         const otherName = Object.entries(conv.participantNames || {}).find(([k]) => k !== currentUser.uid)?.[1] || 'Unknown';
                         const initials = otherName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
                         const unread = conv.unreadCount?.[currentUser.uid] || 0;
-                        return `<div class="conversation-item" onclick="openConversation('${conv.id}', '${otherName}')" style="display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;border-bottom:1px solid var(--light-gray);transition:var(--transition);" onmouseover="this.style.background='var(--light)'" onmouseout="this.style.background=''">
+                        return `<div class="conversation-item" data-name="${escapeHtml(otherName)}" onclick="openConversation('${conv.id}', this.dataset.name)" style="display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;border-bottom:1px solid var(--light-gray);transition:var(--transition);" onmouseover="this.style.background='var(--light)'" onmouseout="this.style.background=''">
                             <div style="width:44px;height:44px;border-radius:50%;background:var(--gradient-primary);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:0.9rem;flex-shrink:0;">${initials}</div>
                             <div style="flex:1;min-width:0;">
                                 <div style="display:flex;justify-content:space-between;align-items:center;">
-                                    <span style="font-weight:600;color:var(--dark);font-size:0.95rem;">${otherName}</span>
+                                    <span style="font-weight:600;color:var(--dark);font-size:0.95rem;">${escapeHtml(otherName)}</span>
                                     ${unread > 0 ? `<span style="background:var(--primary);color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;">${unread}</span>` : ''}
                                 </div>
-                                <div style="color:var(--medium-gray);font-size:0.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${conv.lastMessage || 'No messages yet'}</div>
+                                <div style="color:var(--medium-gray);font-size:0.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(conv.lastMessage || 'No messages yet')}</div>
                             </div>
                         </div>`;
                     }).join('');
@@ -5714,8 +5717,8 @@ function renderJobs(jobs = []) {
                         const isMine = msg.senderId === currentUser.uid;
                         return `<div style="display:flex;justify-content:${isMine ? 'flex-end' : 'flex-start'};margin-bottom:12px;padding:0 16px;">
                             <div style="max-width:70%;">
-                                ${!isMine ? `<div style="font-size:0.75rem;color:var(--medium-gray);margin-bottom:4px;">${msg.senderName}</div>` : ''}
-                                <div style="background:${isMine ? 'var(--primary)' : 'var(--white)'};color:${isMine ? '#fff' : 'var(--dark)'};padding:10px 14px;border-radius:${isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px'};box-shadow:var(--shadow);font-size:0.9rem;line-height:1.4;">${msg.text}</div>
+                                ${!isMine ? `<div style="font-size:0.75rem;color:var(--medium-gray);margin-bottom:4px;">${escapeHtml(msg.senderName)}</div>` : ''}
+                                <div style="background:${isMine ? 'var(--primary)' : 'var(--white)'};color:${isMine ? '#fff' : 'var(--dark)'};padding:10px 14px;border-radius:${isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px'};box-shadow:var(--shadow);font-size:0.9rem;line-height:1.4;">${escapeHtml(msg.text)}</div>
                                 <div style="font-size:0.72rem;color:var(--medium-gray);margin-top:3px;text-align:${isMine ? 'right' : 'left'};">${new Date(msg.createdAt).toLocaleTimeString('en-KE', {hour:'2-digit',minute:'2-digit'})}</div>
                             </div>
                         </div>`;
@@ -5776,8 +5779,8 @@ function renderJobs(jobs = []) {
                             <div style="background:var(--white);border-radius:var(--radius-lg);padding:20px 24px;margin-bottom:16px;box-shadow:var(--shadow);border-left:4px solid ${job.status==='open'?'var(--primary)':job.status==='pending-completion'?'var(--accent)':job.status==='in-progress'?'var(--warning)':'var(--success)'};">
                                 <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
                                     <div>
-                                        <h4 style="margin:0 0 4px;color:var(--dark);font-size:1rem;">${job.title}</h4>
-                                        <span style="color:var(--medium-gray);font-size:0.82rem;"><i class="fas fa-map-marker-alt" style="color:var(--primary);margin-right:4px;"></i>${job.county}${job.subcounty?', '+job.subcounty:''} &bull; KES ${Number(job.budgetMin).toLocaleString()} - ${Number(job.budgetMax).toLocaleString()}</span>
+                                        <h4 style="margin:0 0 4px;color:var(--dark);font-size:1rem;">${escapeHtml(job.title)}</h4>
+                                        <span style="color:var(--medium-gray);font-size:0.82rem;"><i class="fas fa-map-marker-alt" style="color:var(--primary);margin-right:4px;"></i>${escapeHtml(job.county)}${job.subcounty?', '+job.subcounty:''} &bull; KES ${Number(job.budgetMin).toLocaleString()} - ${Number(job.budgetMax).toLocaleString()}</span>
                                     </div>
                                     <span style="background:${job.status==='open'?'#e3f2fd':job.status==='pending-completion'?'#fdecea':job.status==='in-progress'?'#fff3e0':'#e8f5e9'};color:${job.status==='open'?'#1565c0':job.status==='pending-completion'?'#c0392b':job.status==='in-progress'?'#e65100':'#2e7d32'};padding:4px 12px;border-radius:20px;font-size:0.8rem;font-weight:600;text-transform:capitalize;white-space:nowrap;">${job.status.replace('-',' ')}</span>
                                 </div>
@@ -5819,22 +5822,22 @@ function renderJobs(jobs = []) {
                     statsEl.innerHTML = `<div style="grid-column:1/-1;">
                         <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
                             <button onclick="loadMyJobs()" style="background:none;border:none;cursor:pointer;color:var(--primary);font-size:1rem;"><i class="fas fa-arrow-left"></i> Back to My Jobs</button>
-                            <h3 style="margin:0;color:var(--dark);">Quotes for: ${jobTitle}</h3>
+                            <h3 style="margin:0;color:var(--dark);">Quotes for: ${escapeHtml(jobTitle)}</h3>
                         </div>
                         ${data.quotes.map(q => `
                             <div style="background:var(--white);border-radius:var(--radius-lg);padding:20px 24px;margin-bottom:14px;box-shadow:var(--shadow);border:1px solid var(--light-gray);">
                                 <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
                                     <div>
-                                        <h4 style="margin:0 0 4px;color:var(--dark);">${q.providerName}</h4>
+                                        <h4 style="margin:0 0 4px;color:var(--dark);">${escapeHtml(q.providerName)}</h4>
                                         <span style="color:var(--medium-gray);font-size:0.82rem;">${new Date(q.createdAt).toLocaleDateString('en-KE', {year:'numeric',month:'long',day:'numeric'})}</span>
-                                        ${q.estimatedDays ? `<span style="color:var(--medium-gray);font-size:0.82rem;margin-left:10px;"><i class="fas fa-clock" style="margin-right:4px;"></i>${q.estimatedDays} day(s)</span>` : ''}
+                                        ${q.estimatedDays ? `<span style="color:var(--medium-gray);font-size:0.82rem;margin-left:10px;"><i class="fas fa-clock" style="margin-right:4px;"></i>${escapeHtml(q.estimatedDays)} day(s)</span>` : ''}
                                     </div>
                                     <div style="text-align:right;">
                                         <div style="font-size:1.3rem;font-weight:800;color:var(--primary);">KES ${Number(q.amount).toLocaleString()}</div>
                                         <span style="background:${q.status==='accepted'?'#e8f5e9':q.status==='rejected'?'#ffebee':'#fff3e0'};color:${q.status==='accepted'?'#2e7d32':q.status==='rejected'?'#c62828':'#e65100'};padding:3px 10px;border-radius:20px;font-size:0.8rem;font-weight:600;text-transform:capitalize;">${q.status}</span>
                                     </div>
                                 </div>
-                                ${q.message ? `<p style="color:var(--dark-gray);font-size:0.9rem;line-height:1.5;margin-bottom:14px;padding:12px;background:var(--light);border-radius:8px;">"${q.message}"</p>` : ''}
+                                ${q.message ? `<p style="color:var(--dark-gray);font-size:0.9rem;line-height:1.5;margin-bottom:14px;padding:12px;background:var(--light);border-radius:8px;">"${escapeHtml(q.message)}"</p>` : ''}
                                 ${q.status === 'pending' ? `
                                 <div style="display:flex;gap:10px;justify-content:flex-end;">
                                     <button class="btn btn-outline" style="padding:8px 18px;font-size:0.85rem;" onclick="rejectQuote('${q.id}','${jobId}','${jobTitle.replace(/'/g,"\'")}')"><i class="fas fa-times"></i> Decline</button>
@@ -5986,8 +5989,8 @@ function renderJobs(jobs = []) {
                             <div style="background:var(--white);border-radius:var(--radius-lg);padding:20px 24px;margin-bottom:16px;box-shadow:var(--shadow);border-left:4px solid ${job.status==='pending-completion'?'var(--accent)':job.status==='in-progress'?'var(--warning)':'var(--success)'};">
                                 <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
                                     <div>
-                                        <h4 style="margin:0 0 4px;color:var(--dark);font-size:1rem;">${job.title}</h4>
-                                        <span style="color:var(--medium-gray);font-size:0.82rem;"><i class="fas fa-map-marker-alt" style="color:var(--primary);margin-right:4px;"></i>${job.county}${job.subcounty?', '+job.subcounty:''} &bull; KES ${Number(job.acceptedAmount || job.budgetMin).toLocaleString()}</span>
+                                        <h4 style="margin:0 0 4px;color:var(--dark);font-size:1rem;">${escapeHtml(job.title)}</h4>
+                                        <span style="color:var(--medium-gray);font-size:0.82rem;"><i class="fas fa-map-marker-alt" style="color:var(--primary);margin-right:4px;"></i>${escapeHtml(job.county)}${job.subcounty?', '+job.subcounty:''} &bull; KES ${Number(job.acceptedAmount || job.budgetMin).toLocaleString()}</span>
                                     </div>
                                     <span style="background:${job.status==='pending-completion'?'#fdecea':job.status==='in-progress'?'#fff3e0':'#e8f5e9'};color:${job.status==='pending-completion'?'#c0392b':job.status==='in-progress'?'#e65100':'#2e7d32'};padding:4px 12px;border-radius:20px;font-size:0.8rem;font-weight:600;text-transform:capitalize;white-space:nowrap;">${job.status.replace('-',' ')}</span>
                                 </div>
@@ -6057,7 +6060,7 @@ function renderJobs(jobs = []) {
         document.addEventListener('DOMContentLoaded', init);
     </script>
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js" async></script>
-    <script src="/dashboard-v2.js?v=1795095000"></script>
+    <script src="/dashboard-v2.js?v=1795095001"></script>
     <script src="/avatars.js?v=1"></script>
     <script src="/location.js?v=2"></script>
     <script src="/listings.js?v=7"></script>

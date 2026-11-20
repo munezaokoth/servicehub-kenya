@@ -388,7 +388,7 @@ router.post("/", verifyJWT, [body("title").trim().notEmpty(), body("description"
     const jobId = uuidv4();
     const now = new Date().toISOString();
     const savedPhotos = await savePhotos(jobId, photos, 0);
-    const jobData = { id: jobId, title, description, category, county, subcounty: subcounty || null, budgetMin: parseInt(budgetMin), budgetMax: parseInt(budgetMax), urgency: urgency || "normal", photos: savedPhotos, location, status: "open", clientId: req.user.uid, clientName: req.user.name, clientEmail: req.user.email, quotesCount: 0, views: 0, createdAt: now, updatedAt: now,
+    const jobData = { id: jobId, title: String(title).trim().slice(0, 120), description: String(description).trim().slice(0, 3000), category: String(category).slice(0, 60), county: String(county).slice(0, 40), subcounty: subcounty ? String(subcounty).slice(0, 60) : null, budgetMin: parseInt(budgetMin), budgetMax: parseInt(budgetMax), urgency: ["normal", "urgent", "flexible", "low", "high"].includes(urgency) ? urgency : "normal", photos: savedPhotos, location, status: "open", clientId: req.user.uid, clientName: req.user.name, clientEmail: req.user.email, quotesCount: 0, views: 0, createdAt: now, updatedAt: now,
       timeline: [ev("posted", "Job posted", req.user, savedPhotos.length ? `${savedPhotos.length} photo(s) attached` : null)] };
     await firebase.db.collection(firebase.COLLECTIONS.JOBS).doc(jobId).set(jobData);
     firebase.db.collection(firebase.COLLECTIONS.USERS).doc(req.user.uid).update({ jobsPosted: admin.firestore.FieldValue.increment(1) }).catch(() => {});
@@ -424,9 +424,24 @@ router.put("/:id", verifyJWT, async (req, res) => {
     const doc = await firebase.db.collection(firebase.COLLECTIONS.JOBS).doc(req.params.id).get();
     if (!doc.exists) return res.status(404).json({ success: false, message: "Job not found" });
     if (doc.data().clientId !== req.user.uid) return res.status(403).json({ success: false, message: "Not authorised" });
-    const allowed = ["title", "description", "budgetMin", "budgetMax", "urgency", "status", "subcounty"];
+    const job = doc.data(), b = req.body || {};
     const updates = { updatedAt: new Date().toISOString() };
-    allowed.forEach((k) => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
+    const txt = (v, n) => String(v).trim().slice(0, n);
+    if (b.title !== undefined) { updates.title = txt(b.title, 120); if (updates.title.length < 3) return res.status(422).json({ success: false, message: "Title is too short" }); }
+    if (b.description !== undefined) updates.description = txt(b.description, 3000);
+    if (b.subcounty !== undefined) updates.subcounty = txt(b.subcounty, 60);
+    if (b.urgency !== undefined) updates.urgency = ["low", "normal", "medium", "high", "urgent", "flexible"].includes(b.urgency) ? b.urgency : "normal";
+    ["budgetMin", "budgetMax"].forEach((k) => {
+      if (b[k] === undefined) return;
+      const n = Number(b[k]);
+      if (!isFinite(n) || n < 0 || n > 100000000) return;
+      updates[k] = Math.round(n);
+    });
+    // Status changes go through their own steps (quotes, completion); here a client may only cancel or reopen
+    if (b.status !== undefined) {
+      if (!["open", "cancelled"].includes(b.status) || !["open", "cancelled"].includes(job.status)) return res.status(422).json({ success: false, message: "That status change isn't allowed here" });
+      updates.status = b.status;
+    }
     await doc.ref.update(updates);
     return res.json({ success: true, message: "Job updated" });
   } catch (error) {

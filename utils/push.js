@@ -18,12 +18,22 @@ function init() {
     if (!pub || !priv) {
       const ref = firebase.db.collection("app_config").doc("vapid");
       const doc = await ref.get();
-      if (doc.exists && doc.data().publicKey && doc.data().privateKey) {
+      // Generation 2: the first key pair sat in a database that was briefly readable from outside (Nov 2026),
+      // so it is replaced once. Browsers re-subscribe with the new key automatically the next time ServiceHub opens.
+      if (doc.exists && doc.data().publicKey && doc.data().privateKey && doc.data().generation >= 2) {
         ({ publicKey: pub, privateKey: priv } = doc.data());
       } else {
         const keys = webpush.generateVAPIDKeys();
         pub = keys.publicKey; priv = keys.privateKey;
-        await ref.set({ publicKey: pub, privateKey: priv, createdAt: new Date().toISOString() });
+        await ref.set({ publicKey: pub, privateKey: priv, generation: 2, createdAt: new Date().toISOString() });
+        // Browser subscriptions made with the old key can't receive pushes signed with the new one
+        if (doc.exists) {
+          const old = await firebase.db.collection(SUBS).get();
+          const batch = firebase.db.batch(); let n = 0;
+          old.docs.forEach((d) => { if (d.data().kind !== "fcm" && n < 450) { batch.delete(d.ref); n++; } });
+          if (n) await batch.commit();
+          console.log(`🔑 Web push keys replaced; ${n} old browser subscriptions cleared`);
+        }
       }
     }
     webpush.setVapidDetails(process.env.VAPID_SUBJECT || `mailto:${process.env.EMAIL_FROM || "support@servicehub.co.ke"}`, pub, priv);
