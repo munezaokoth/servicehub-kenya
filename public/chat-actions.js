@@ -27,6 +27,11 @@
   .shc-row.me .shm-quote{background:rgba(255,255,255,.18);border-left-color:#fff}
   .shm-quote b{display:block;font-size:.76rem;opacity:.9}
   .shm-edited{font-style:italic;opacity:.75;margin-right:4px}
+  .shm-tick{display:inline-flex;vertical-align:-3px;margin-left:4px}
+  .shm-tick svg{width:18px;height:12px}
+  .shm-tick.sent,.shm-tick.delivered{color:#d7dde6}
+  .shm-tick.read{color:#2ee66b}
+  body:not(.dark-theme) .shc-row.me .shm-tick.read{color:#39ff7a;filter:drop-shadow(0 0 1px rgba(0,60,20,.55))}
   .shm-del{font-style:italic;opacity:.7}
   .shc-row.shm-flash .shc-b{animation:shmFlash 1.4s ease}
   @keyframes shmFlash{0%,60%{box-shadow:0 0 0 3px #f28a12}100%{box-shadow:none}}
@@ -43,6 +48,17 @@
   #shm-bar button{border:0;background:none;font-size:1.3rem;color:var(--medium-gray);cursor:pointer;line-height:1}`;
   document.head.appendChild(st);
 
+  /* ── Ticks: 1 grey = sent, 2 grey = delivered, 2 green = read ── */
+  const statusOf = (m) => (m.readAt || m.read === true ? "read" : m.deliveredAt ? "delivered" : "sent");
+  const ONE = '<svg viewBox="0 0 18 12" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 6.3l3 3L13 2.6"/></svg>';
+  const TWO = '<svg viewBox="0 0 18 12" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 6.3l3 3L11 2.6"/><path d="M7.6 9.1l.2.2L14.3 2.6"/></svg>';
+  function ticks(m) {
+    if (m.senderId !== me() || m.system || m.type === "call" || m.deleted) return "";
+    const st = statusOf(m);
+    const label = st === "read" ? "Read" : st === "delivered" ? "Delivered" : "Sent";
+    return `<span class="shm-tick ${st}" title="${label}" aria-label="${label}">${st === "sent" ? ONE : TWO}</span>`;
+  }
+
   /* ── Message bubbles (replaces the chat's bubble drawing; same look, plus replies / edited / deleted) ── */
   const canEdit = (m) => m.senderId === me() && !m.system && m.type !== "call" && !m.deleted && Date.now() - new Date(m.createdAt).getTime() < EDIT_WINDOW_MS;
   function bubble(msg) {
@@ -53,7 +69,7 @@
     const body = msg.deleted
       ? `<span class="shm-del"><i class="fas fa-ban"></i> ${mine ? "You deleted this message" : "This message was deleted"}</span>`
       : esc(msg.text);
-    return `<div class="shc-row ${mine ? "me" : "them"}" data-id="${esc(msg.id)}"><div class="shc-b">${mine ? "" : `<div class="shc-name">${esc(msg.senderName || "")}</div>`}${quote}${body}<div class="shc-time">${msg.edited && !msg.deleted ? '<span class="shm-edited">edited</span>' : ""}${shcTime(msg.createdAt)}</div>${msg.deleted ? "" : '<button type="button" class="shm-more" aria-label="Message options"><i class="fas fa-ellipsis-v"></i></button>'}</div></div>`;
+    return `<div class="shc-row ${mine ? "me" : "them"}" data-id="${esc(msg.id)}"><div class="shc-b">${mine ? "" : `<div class="shc-name">${esc(msg.senderName || "")}</div>`}${quote}${body}<div class="shc-time">${msg.edited && !msg.deleted ? '<span class="shm-edited">edited</span>' : ""}${shcTime(msg.createdAt)}${ticks(msg)}</div>${msg.deleted ? "" : '<button type="button" class="shm-more" aria-label="Message options"><i class="fas fa-ellipsis-v"></i></button>'}</div></div>`;
   }
   function install() {
     if (typeof shcMsgHTML !== "function" || shcMsgHTML.__shm) return false;
@@ -196,8 +212,39 @@
     let s = null; try { s = socket; } catch (e) {}
     if (!s || s.__shm) return;
     s.__shm = true;
-    s.on("message_updated", (msg) => { if (msg && msg.conversationId === convId()) redraw(msg); try { loadConversations(); } catch (e) {} });
+    s.on("message_updated", (msg) => { if (msg && msg.conversationId === convId()) { const old = MSGS[msg.id] || {}; redraw({ ...msg, deliveredAt: msg.deliveredAt || old.deliveredAt, readAt: msg.readAt || old.readAt }); } try { loadConversations(); } catch (e) {} });
+    // Ticks change live for the sender
+    s.on("message_status", ({ conversationId, ids, status, at }) => {
+      (ids || []).forEach((id) => {
+        const m = MSGS[id]; if (!m) return;
+        if (status === "read") { m.readAt = m.readAt || at; m.deliveredAt = m.deliveredAt || at; }
+        else if (!m.deliveredAt) m.deliveredAt = at;
+        if (conversationId !== convId()) return;
+        const el = document.querySelector(`#chat-messages .shc-row[data-id="${CSS.escape(id)}"] .shm-tick`);
+        if (el) el.outerHTML = ticks(m);
+      });
+    });
+    // A message arrived: if this chat is open and on screen it's read now; otherwise show a notice
+    s.on("new_message", (msg) => {
+      if (!msg || msg.senderId === me()) return;
+      if (msg.conversationId === convId() && chatOnScreen()) markReadSoon();
+    });
+    s.on("new_conversation_message", ({ conversationId, message }) => {
+      if (!message || message.senderId === me()) return;
+      if (conversationId === convId() && chatOnScreen()) return;
+      notify(`💬 <b>${esc(message.senderName || "New message")}</b>: ${esc(String(message.text || "").slice(0, 80))}`, "info");
+      try { loadConversations(); } catch (e) {}
+    });
   }
+
+  const chatOnScreen = () => document.visibilityState === "visible" && !!document.querySelector("#chat.active");
+  let readTimer = null;
+  function markReadSoon() {
+    clearTimeout(readTimer);
+    readTimer = setTimeout(() => { const c = convId(); if (c && chatOnScreen()) api(`/chat/conversations/${c}/read`, { method: "POST" }); }, 400);
+  }
+  // Coming back to the app with a chat open marks it read
+  document.addEventListener("visibilitychange", () => { if (chatOnScreen() && convId()) markReadSoon(); });
 
   // Start a fresh conversation without a leftover reply/edit
   function hookOpen() {

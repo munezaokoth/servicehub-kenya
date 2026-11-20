@@ -4,11 +4,14 @@ const router = express.Router();
 const firebase = require("../config/firebase");
 const { verifyJWT } = require("../middleware/auth");
 const admin = require("firebase-admin");
+const push = require("../utils/push");
+const receipts = require("../utils/receipts");
 
 router.get("/conversations", verifyJWT, async (req, res) => {
   try {
     const snap = await firebase.db.collection(firebase.COLLECTIONS.CONVERSATIONS).where("participants", "array-contains", req.user.uid).get();
     const conversations = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(b.lastMessageAt || "").localeCompare(String(a.lastMessageAt || ""))).slice(0, 50);
+    receipts.markDelivered(req.user.uid);
     return res.json({ success: true, conversations });
   } catch (error) {
     console.error("Get conversations error:", error);
@@ -43,6 +46,7 @@ router.get("/conversations/:id/messages", verifyJWT, async (req, res) => {
     if (!convDoc.exists) return res.status(404).json({ success: false, message: "Conversation not found" });
     if (!convDoc.data().participants.includes(req.user.uid)) return res.status(403).json({ success: false, message: "Not authorised" });
     const snap = await firebase.db.collection(firebase.COLLECTIONS.MESSAGES).where("conversationId", "==", req.params.id).get();
+    receipts.markRead(req.user.uid, req.params.id, snap.docs.map((d) => ({ ref: d.ref, ...d.data() })));
     const messages = snap.docs.map((d) => publicMsg({ id: d.id, ...d.data() }))
       .filter((m) => !(Array.isArray(m.hiddenFor) && m.hiddenFor.includes(req.user.uid)))
       .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || ""))).slice(-200)
@@ -66,7 +70,9 @@ router.post("/conversations/:id/messages", verifyJWT, async (req, res) => {
     if (!conv.participants.includes(req.user.uid)) return res.status(403).json({ success: false, message: "Not authorised" });
     const msgId = uuidv4();
     const now = new Date().toISOString();
-    const msgData = { id: msgId, conversationId: req.params.id, senderId: req.user.uid, senderName: req.user.name, text: text.trim(), read: false, createdAt: now };
+    const otherUserId = conv.participants.find((p) => p !== req.user.uid);
+    const msgData = { id: msgId, conversationId: req.params.id, senderId: req.user.uid, senderName: req.user.name, recipientId: otherUserId, text: text.trim(), read: false, createdAt: now, deliveredAt: null, readAt: null };
+    if (await receipts.isOnline(otherUserId)) msgData.deliveredAt = now; // their app is open, it arrives instantly
     // Reply to an earlier message in the same conversation (a short quote is kept with the reply)
     if (replyTo) {
       const orig = await firebase.db.collection(firebase.COLLECTIONS.MESSAGES).doc(String(replyTo)).get();
@@ -76,9 +82,16 @@ router.post("/conversations/:id/messages", verifyJWT, async (req, res) => {
       }
     }
     await firebase.db.collection(firebase.COLLECTIONS.MESSAGES).doc(msgId).set(msgData);
-    const otherUserId = conv.participants.find((p) => p !== req.user.uid);
     await convDoc.ref.update({ lastMessage: text.trim().slice(0, 100), lastMessageAt: now, lastMessageSenderId: req.user.uid, [`unreadCount.${otherUserId}`]: admin.firestore.FieldValue.increment(1) });
-    if (global.io) global.io.to(`conversation:${req.params.id}`).emit("new_message", msgData);
+    if (global.io) {
+      global.io.to(`conversation:${req.params.id}`).emit("new_message", msgData);
+      global.io.to(`user:${otherUserId}`).emit("new_conversation_message", { conversationId: req.params.id, message: msgData });
+    }
+    // Phone notification (app closed or in the background); the phone confirms delivery back to us
+    push.sendToUser(otherUserId, {
+      type: "message", conversationId: req.params.id, messageId: msgId, senderName: req.user.name || "ServiceHub",
+      title: req.user.name || "New message", body: text.trim().slice(0, 160), recipientId: otherUserId, ackToken: receipts.ackToken(msgId, otherUserId),
+    }, { ttl: 24 * 3600, urgency: "high", topic: `m${String(req.params.id).replace(/-/g, "").slice(0, 30)}` }).catch((e) => console.error("Message push error:", e.message));
     return res.status(201).json({ success: true, message: msgData });
   } catch (error) {
     console.error("Send message error:", error);
@@ -155,6 +168,24 @@ router.delete("/conversations/:id/messages/:msgId", verifyJWT, async (req, res) 
     console.error("Delete message error:", error);
     return res.status(500).json({ success: false, message: "Could not delete the message" });
   }
+});
+
+
+// POST /api/chat/conversations/:id/read: the chat is open on screen, mark the other side's messages read
+router.post("/conversations/:id/read", verifyJWT, async (req, res) => {
+  try {
+    const convDoc = await firebase.db.collection(firebase.COLLECTIONS.CONVERSATIONS).doc(req.params.id).get();
+    if (!convDoc.exists || !(convDoc.data().participants || []).includes(req.user.uid)) return res.status(404).json({ success: false });
+    const ids = await receipts.markRead(req.user.uid, req.params.id);
+    convDoc.ref.update({ [`unreadCount.${req.user.uid}`]: 0 }).catch(() => {});
+    return res.json({ success: true, read: ids.length });
+  } catch (e) { return res.status(500).json({ success: false }); }
+});
+
+// POST /api/chat/delivered-ack { m, u, t }: sent by the phone when a message notification arrives (no sign-in needed; signed token)
+router.post("/delivered-ack", async (req, res) => {
+  const { m, u, t } = req.body || {};
+  try { return res.json({ success: await receipts.ackDelivered(m, u, t) }); } catch (e) { return res.json({ success: false }); }
 });
 
 // GET /api/chat/conversations/:id/contact

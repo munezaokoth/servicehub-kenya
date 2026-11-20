@@ -7,7 +7,7 @@ import com.google.firebase.messaging.RemoteMessage;
 
 import java.util.Map;
 
-/** Receives call pushes from the ServiceHub server (Firebase Cloud Messaging, high priority data messages). */
+/** Receives call and message pushes from the ServiceHub server (Firebase Cloud Messaging, high priority data messages). */
 public class CallMessagingService extends FirebaseMessagingService {
 
     @Override
@@ -36,6 +36,14 @@ public class CallMessagingService extends FirebaseMessagingService {
                 break;
             case "call_missed":
                 CallNotifier.showMissed(this, d);
+                break;
+            case "message":
+                // Confirm delivery to the sender (two grey ticks), then notify unless ServiceHub is on screen
+                MessageNotifier.ackDelivered(d);
+                if (!MainActivity.isInForeground()) MessageNotifier.show(this, d);
+                break;
+            case "message_read":
+                MessageNotifier.cancel(this, d.get("conversationId"));
                 break;
             default:
                 break;

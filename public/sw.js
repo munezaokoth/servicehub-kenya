@@ -57,6 +57,26 @@ self.addEventListener("push", (event) => {
       });
     }
 
+    if (d.type === "message") {
+      // Tell the sender it was delivered (two grey ticks)
+      const ack = fetch("/api/chat/delivered-ack", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ m: d.messageId, u: d.recipientId, t: d.ackToken }) }).catch(() => {});
+      const open = await visibleClient();
+      if (open) { open.postMessage({ type: "message_push", data: d }); await ack; return; } // the page shows it itself
+      await ack;
+      return self.registration.showNotification(d.senderName || "New message", {
+        body: d.body || "New message on ServiceHub",
+        tag: "msg-" + d.conversationId,
+        renotify: true,
+        icon: "/icons/icon-192.png",
+        badge: "/icons/badge-72.png",
+        timestamp: Date.now(),
+        data: d,
+      });
+    }
+
+    if (d.type === "message_read") { await closeTag("msg-" + d.conversationId); return; }
+
     return self.registration.showNotification(d.title || "ServiceHub Kenya", {
       body: d.body || "", icon: "/icons/icon-192.png", badge: "/icons/badge-72.png", data: d,
     });
@@ -94,6 +114,11 @@ self.addEventListener("notificationclick", (event) => {
 
   if (d.type === "call_missed") {
     event.waitUntil(focusOrOpen(`/?chat=${encodeURIComponent(d.conversationId)}`, { type: "open_chat", conversationId: d.conversationId, name: d.callerName }));
+    return;
+  }
+
+  if (d.type === "message") {
+    event.waitUntil(focusOrOpen(`/?chat=${encodeURIComponent(d.conversationId)}`, { type: "open_chat", conversationId: d.conversationId, name: d.senderName }));
     return;
   }
 

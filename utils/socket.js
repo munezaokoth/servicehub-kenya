@@ -40,6 +40,8 @@ function initSocket(httpServer) {
 
     // Personal room for notifications
     socket.join(`user:${uid}`);
+    // Their app is open: messages waiting for them are now delivered (two grey ticks for the sender)
+    require("./receipts").markDelivered(uid);
 
     // ── Chat rooms ──────────────────────────────────────────────────────
     socket.on("join_conversation", (conversationId) => {
